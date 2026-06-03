@@ -1,0 +1,176 @@
+---
+title: "Web App"
+description: "What the web app does and how the user-facing API behaves."
+---
+
+Finn includes a lightweight web app and web API for user management tasks that do not fit naturally into iMessage.
+
+The UI is intentionally app-like rather than dashboard-heavy: it runs as a standalone-oriented PWA shell, uses bottom sheets for secondary surfaces, and keeps the primary action model close to the iMessage product.
+
+## What The Web App Is For
+
+The web app currently focuses on four jobs:
+
+- phone-based login
+- profile editing
+- Library file management
+- connector management
+- pattern management
+
+The dashboard also includes a `Text Finn` action that deep-links to the user's assigned Spectrum line so the user can jump straight back into the iMessage thread.
+
+The API lives under `/api/web/*`.
+
+## Authentication Model
+
+The web app uses a phone-number login flow.
+
+### Request a code
+
+`POST /api/web/auth/request`
+
+- user provides a phone number
+- Finn normalizes the number
+- Finn sends a 6-digit login code back to that number through Spectrum
+
+### Verify a code
+
+`POST /api/web/auth/verify`
+
+- Finn checks expiration and attempt count
+- on success, it creates a web session record and sets the `finn_session` cookie
+
+### Session state
+
+`GET /api/web/session`
+
+- returns the current user when a valid session cookie exists
+- otherwise returns `user: null`
+- also returns `finnPhoneNumber`, sourced from the user's stored Spectrum assignment or the optional dedicated line, so the web app can build its SMS deep link without hardcoding frontend config
+
+`POST /api/web/auth/verify` returns the same session payload shape after successful login.
+
+## Profile Editing
+
+The current profile API supports:
+
+- display name
+- phone number
+- timezone
+- timezone source
+- location
+
+Timezone can come from either:
+
+- the server default
+- a one-time browser timezone capture after login
+- a user-selected manual timezone
+
+The source is persisted as `server`, `browser`, or `manual`. On authenticated dashboard load, the browser timezone is saved once only while the source is still `server`; later dashboard loads do not overwrite a captured browser timezone or a manual user choice.
+
+Profile writes also refresh the in-memory user runtime so new context is available quickly.
+
+## Connectors UI Surface
+
+The web app is also the management surface for connectors. The connectors sheet has dedicated tabs for Apps, MCP, and Puter.
+
+It supports:
+
+- listing Composio app connectors
+- listing MCP servers
+- starting authorization
+- confirming a new connection
+- reading connector detail
+- editing connector permission mode
+- toggling My Day and Personal Intelligence per eligible connector
+- pairing and configuring Puter after the Mac app links to the account
+- reconnecting expired connectors
+- deleting connectors
+
+Connected connector detail is rendered as an in-sheet drill-in rather than a full page transition. The back affordance lives in the sheet header so the interaction still feels like a native app stack.
+
+When a connector becomes newly connected, the web route syncs connector config with My Day and Personal Intelligence off by default unless the connector is a required primary mail connector. Primary Gmail or Outlook connectors keep My Day and Personal Intelligence enabled and cannot be disconnected from the connector sheet. For other connectors, the web UI shows Personal Intelligence only after Finn verifies a stable account identity for that provider account; pending or failed identity resolution is displayed as unavailable. Connector lifecycle changes do not route a message through the hot path or queue a My Day refresh. If the user later enables Personal Intelligence for an eligible connector, the web route queues a scoped ingestion for that connector only.
+
+Puter is a special local-Mac connector. It has its own connector-sheet tab rather than appearing among Composio apps. Before setup, the Puter tab stays setup-only until Finn Puter signs in and pairs a device. iMessage and Notes toggles are hidden until that paired-device state exists. After pairing, each source has a main tool-access toggle plus a separate Personal Intelligence sub-toggle.
+
+## My Day UI Surface
+
+The web app exposes My Day as a sheet with a daily summary and editable todos. Opening the sheet only reads the current page; it never starts an LLM refresh. Empty summaries use gentle placeholder copy while the background scheduler waits for a configured user-local refresh time.
+
+Todo rows are editable inline. The title input starts as one line, grows up to three lines, then scrolls. Open todos roll forward across days, while completed todos are visible only on the local day they were completed. Deleting archives the todo from the visible list while keeping it available for dedupe. Handoff asks for confirmation and routes the todo into Finn's hot-path context so Finn can decide whether to ask the user, delegate worker work, or mark the todo done.
+
+## Library UI Surface
+
+The web app exposes user-visible files through the Library sheet.
+
+Library shows only files marked user-visible. User-sent attachments and files Finn creates to share back are visible by default; worker scratch downloads, logs, transcripts, and intermediate artifacts should stay hidden unless a worker deliberately marks them visible.
+
+Users can:
+
+- browse root and nested folders
+- create folders
+- upload files
+- move files between folders
+- delete visible files
+- delete folders
+
+The underlying workspace still separates concerns: user-owned files live under `files/`, transient worker material under `tmp/`, worker skills under `skills/`, and Finn internals under `.finn/`.
+
+## Pattern Management UI Surface
+
+The web app lets users:
+
+- list patterns
+- inspect a pattern
+- create a scheduled Pattern
+- edit pattern name, user description, task prompt, trigger filters, notify condition, and connector scope
+- inspect recent Pattern runs
+- pause or resume a pattern
+- run a pattern manually
+- delete a pattern
+
+Trigger type and base trigger config are more constrained after creation than the rest of the Pattern definition. The current web create flow focuses on scheduled Patterns with structured schedule configs, while event-triggered Pattern creation is available through Pattern-management tooling and runtime integrations.
+
+## App Shell Behavior
+
+The current web shell is tuned to behave more like an installed app than a generic browser page:
+
+- production builds register `public/sw.js`
+- the manifest uses standalone display mode
+- sheet state mirrors `/`, `/patterns`, and `/connectors`
+- the Library sheet mirrors `/library`
+- sheet URL updates use `replaceState` so transient in-app navigation does not accumulate browser back-stack entries
+- toast notifications render through `react-hot-toast`; sheet-visible toasts are portaled into the active Silk sheet layer so they appear above bottom sheets
+- the app starts in a session-loading state and only renders login after `/api/web/session` confirms there is no active session
+- primary app imagery disables normal drag and context-menu affordances to reduce save/share browser behavior
+
+This does not fully disable OS-level edge-swipe navigation in a browser tab, but it avoids adding extra in-app history entries and behaves best when installed in standalone mode.
+
+## Why These Features Live In The Web App
+
+These actions are easier and safer in a browser than in a text thread because they involve:
+
+- account management
+- longer forms
+- connector auth redirects
+- structured lists and toggles
+
+The hot path still remains the user-facing personality layer. The web app is a companion control surface.
+
+## Related Storage
+
+The web app relies heavily on these tables:
+
+- `web_login_codes`
+- `web_sessions`
+- `users`
+- `user_connector_configs`
+- `patterns`
+- `pattern_runs`
+
+## Next Reads
+
+- [Connectors and Patterns](/features/connectors-and-patterns)
+- [Puter](/features/puter)
+- [Web API](/reference/web-api)
+- [Data Model](/reference/data-model)

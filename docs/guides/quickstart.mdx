@@ -1,0 +1,148 @@
+---
+title: "Quickstart"
+description: "Boot Finn locally with the smallest practical setup."
+---
+
+This is the shortest path to a working Finn instance.
+
+## Prerequisites
+
+You need:
+
+- Bun 1.x
+- Docker Desktop or a local Postgres 16+ instance
+- Photon Spectrum iMessage project credentials
+- At least one model provider key: Anthropic, OpenAI, Fireworks, or DeepSeek
+
+Optional but useful:
+
+- Cloudflare Tunnel for public local web/API callbacks
+- Composio for connectors and patterns
+- Deepgram and ElevenLabs for voice
+- Exa and Fal for research and creative tasks
+
+Runtime note:
+
+- Finn runs on Bun. Finn JS workspace runs model-authored JavaScript inside Secure Exec and exposes only the Finn APIs granted to the current runtime.
+- Local non-Docker runs also need the same media and document binaries that the production image installs: `ffmpeg`, `poppler-utils`, `tesseract-ocr`, `libreoffice`, `libheif-examples`, and `ocrmypdf`. On macOS, the closest Homebrew packages are `ffmpeg`, `poppler`, `tesseract`, `libreoffice`, `libheif`, and `ocrmypdf`.
+
+## Install Dependencies
+
+From the repo root:
+
+```bash
+bun install
+```
+
+## Create Your Environment File
+
+```bash
+cp .env.example .env
+```
+
+At minimum, fill in these values:
+
+| Variable | Why it matters |
+|---|---|
+| `SPECTRUM_PROJECT_ID` | Spectrum project ID |
+| `SPECTRUM_PROJECT_SECRET` | Spectrum project secret |
+| `PUBLIC_URL` | Base URL for webhooks and file links |
+| `DATABASE_URL` | Postgres connection string |
+| `DEFAULT_PROVIDER` | Default LLM provider: `anthropic`, `openai`, `fireworks`, or `deepseek` |
+| `DEFAULT_MODEL` | Default provider-prefixed model string |
+| `DEFAULT_API_KEY` | API key for the default provider |
+
+If you only want one provider/model across Finn, leave the `HOT_PATH_*`, `WORKER_*`, and `COMPACTOR_*` LLM overrides empty. Use those process-specific overrides only when a process needs a different provider, model, or API key.
+
+Set `SPECTRUM_ALLOWED_NUMBERS` when you want a self-hosted allowlist and boot-time user provisioning. It is optional for runtime config, but most local demos set it to the phone numbers that should be allowed to text Finn.
+
+`SPECTRUM_DEDICATED_LINE_PHONE` is optional and only needed when intentionally pinning a Business/dedicated Spectrum line. Shared-pool deployments should leave it unset; Finn provisions allowed numbers with Spectrum and uses each user's assigned line for the web app's `Text Finn` link.
+
+## Start Postgres
+
+```bash
+docker compose up postgres -d
+```
+
+## Apply The Schema
+
+```bash
+bun run db:push
+```
+
+For local development that is usually enough. If you are working on schema changes, use `bun run db:generate` and `bun run db:migrate` instead.
+
+## Start Finn
+
+```bash
+bun run dev
+```
+
+The server listens on `http://localhost:3000` by default.
+
+## Optional: Run The Web App Separately
+
+Finn's server can serve the built web app, but day-to-day UI work is easier if you run the Vite app directly in another terminal:
+
+```bash
+bun run web:dev
+```
+
+## Expose A Public URL
+
+Composio and the web app need a public callback URL in some setups. For local development, the easiest path is Cloudflare Tunnel.
+
+1. Create a tunnel in Cloudflare.
+2. Set `CLOUDFLARE_TUNNEL_TOKEN` in `.env`.
+3. Set `PUBLIC_URL` to the tunnel URL.
+4. Start the tunnel profile:
+
+```bash
+docker compose --profile tunnel up -d
+```
+
+## Configure Webhooks
+
+Spectrum iMessage ingress is handled by the SDK message stream and does not use a Finn webhook. If you are using Composio-triggered patterns, point Composio at:
+
+```text
+<PUBLIC_URL>/webhooks/composio
+```
+
+## Smoke Test Checklist
+
+Use this after booting the stack:
+
+1. Open `http://localhost:3000/health` and confirm it returns `status: ok`.
+2. Send a test iMessage from an allowed number.
+3. Confirm Finn replies.
+4. Hit `GET /api/web/session` in the browser and confirm the web API is reachable.
+5. If you enabled the web app, request a login code and verify it arrives by iMessage.
+
+## Common First-Time Issues
+
+### Message arrives but Finn ignores it
+
+Check:
+
+- `SPECTRUM_PROJECT_ID`
+- `SPECTRUM_PROJECT_SECRET`
+- `SPECTRUM_ALLOWED_NUMBERS`
+
+If `SPECTRUM_ALLOWED_NUMBERS` is set, only those numbers can create or use a Finn runtime.
+
+### Server starts but the home page says the web app is not built
+
+That is expected if you are only running the server. Build the web app with:
+
+```bash
+bun run web:build
+```
+
+Or run the Vite app separately with `bun run web:dev`.
+
+## Next Reads
+
+- [Project Structure](/guides/project-structure)
+- [Configuration](/operations/configuration)
+- [Deployment](/operations/deployment)

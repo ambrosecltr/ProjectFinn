@@ -1,0 +1,255 @@
+---
+title: "Hindsight Memory Operations"
+description: "How to configure hosted or self-hosted Hindsight as Finn's optional long-term memory provider."
+---
+
+Hindsight is an optional external memory provider. Finn still works without it because profile context, conversation history, compaction, files, workers, and Patterns all remain backed by Finn's own database and runtime systems.
+
+Enable Hindsight only when you want provider-backed recall across handled user turns and recurring Pattern outcomes.
+
+## When Finn Uses Hindsight
+
+Set Finn's memory provider explicitly:
+
+```bash
+MEMORY_PROVIDER=hindsight
+MEMORY_MODE=hybrid
+HINDSIGHT_BASE_URL=https://api.hindsight.vectorize.io
+HINDSIGHT_API_KEY=your-hindsight-api-key
+```
+
+`HINDSIGHT_API_KEY` is optional for local unauthenticated deployments. When present, Finn sends it as `Authorization: Bearer <key>`.
+
+Only one external memory provider can be active at a time:
+
+| Value | Behavior |
+|---|---|
+| `MEMORY_PROVIDER=none` | disables external memory |
+| `MEMORY_PROVIDER=supermemory` | uses Supermemory and requires `SUPERMEMORY_API_KEY` |
+| `MEMORY_PROVIDER=hindsight` | uses Hindsight and requires `HINDSIGHT_BASE_URL` |
+
+`MEMORY_MODE` controls hot-path recall behavior. `hybrid` uses fast Hindsight recall to inject compact relevant facts and still exposes memory tools, `context` injects compact recall without tools, and `tools` exposes tools without automatic injection. Auto recall does not use Hindsight reflect.
+
+If one provider is configured and `MEMORY_PROVIDER` is unset, Finn infers that provider. If multiple providers are configured, Finn requires `MEMORY_PROVIDER` and fails startup without it.
+
+## Hosted Hindsight
+
+For hosted Hindsight, point Finn at the hosted API URL and provide the issued API key:
+
+```bash
+MEMORY_PROVIDER=hindsight
+HINDSIGHT_BASE_URL=https://api.hindsight.vectorize.io
+HINDSIGHT_API_KEY=your-hindsight-api-key
+```
+
+Restart Finn after changing memory configuration. Check `GET /admin/status` for `memoryProvider: "hindsight"`, `memoryMode`, `capabilities.integrations.memory: true`, and `runtimeGating` entries that match the selected mode. In `context` mode, hot-path memory tools should be disabled even though Hindsight-backed memory is enabled.
+
+## Self-Hosted Hindsight
+
+For a local all-in-one Hindsight container:
+
+```bash
+docker run --rm -it --pull always -p 8888:8888 -p 9999:9999 \
+  -e HINDSIGHT_API_LLM_API_KEY=$OPENAI_API_KEY \
+  -e HINDSIGHT_API_WORKER_ID=hindsight-prod \
+  -v $HOME/.hindsight-docker:/home/hindsight/.pg0 \
+  ghcr.io/vectorize-io/hindsight:latest
+```
+
+Then configure Finn:
+
+```bash
+MEMORY_PROVIDER=hindsight
+HINDSIGHT_BASE_URL=http://localhost:8888
+# HINDSIGHT_API_KEY is optional unless your Hindsight API requires auth.
+```
+
+For production self-hosting, use external PostgreSQL 14+ with a supported vector extension instead of embedded `pg0`:
+
+```bash
+HINDSIGHT_API_DATABASE_URL=postgresql://user:pass@postgres.example.com:5432/hindsight
+HINDSIGHT_API_VECTOR_EXTENSION=pgvector
+HINDSIGHT_API_LLM_PROVIDER=openai
+HINDSIGHT_API_LLM_API_KEY=sk-...
+HINDSIGHT_API_WORKER_ID=hindsight-prod
+```
+
+Supported vector extensions include `pgvector`, `pgvectorscale`, `vchord`, and `scann`. Choose one before retaining production data because changing embedding dimensions or vector-extension storage after data exists can require reindexing or data migration.
+
+To require an API key on self-hosted Hindsight, enable Hindsight's built-in API-key tenant extension on the Hindsight service:
+
+```bash
+HINDSIGHT_API_TENANT_EXTENSION=hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
+HINDSIGHT_API_TENANT_API_KEY=long-random-api-key
+```
+
+Then set Finn's client-side key to the same value:
+
+```bash
+HINDSIGHT_API_KEY=long-random-api-key
+```
+
+### Embeddings And Reranking
+
+The default full Hindsight image uses local embedding and reranker models. The slim image requires external embedding and reranker providers.
+
+Common production options:
+
+```bash
+# Embeddings through OpenAI
+HINDSIGHT_API_EMBEDDINGS_PROVIDER=openai
+HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY=sk-...
+HINDSIGHT_API_EMBEDDINGS_OPENAI_MODEL=text-embedding-3-small
+
+# Reranking through Cohere
+HINDSIGHT_API_RERANKER_PROVIDER=cohere
+HINDSIGHT_API_RERANKER_COHERE_API_KEY=...
+HINDSIGHT_API_RERANKER_COHERE_MODEL=rerank-english-v3.0
+```
+
+Do not change embedding dimensions after retaining data unless you are prepared to rebuild or replace the memory database.
+
+### Workers And Control Plane
+
+Hindsight's API service defaults to port `8888`. The Control Plane UI defaults to port `9999`. Dedicated worker metrics default to port `8889`.
+
+For high-throughput deployments, disable the API's internal worker and run dedicated workers:
+
+```bash
+HINDSIGHT_API_WORKER_ENABLED=false hindsight-api
+hindsight-worker --worker-id worker-1
+hindsight-worker --worker-id worker-2
+```
+
+Use stable worker IDs. If worker IDs change on restart, in-flight Hindsight operations can become stranded under the old worker identity.
+
+Protect the Control Plane if it is reachable outside a trusted network:
+
+```bash
+HINDSIGHT_CP_DATAPLANE_API_URL=https://hindsight-api.example.com
+HINDSIGHT_CP_ACCESS_KEY=long-random-access-key
+```
+
+Finn only needs the Hindsight API URL. It does not need Control Plane access.
+
+## How Finn Maps Memory
+
+Finn uses Hindsight banks as isolation boundaries:
+
+| Finn memory surface | Hindsight bank |
+|---|---|
+| User memory and activity feed | one bank per `{tenantId, userId}` |
+| Pattern memory | one bank per `{tenantId, userId, patternId}` |
+
+Bank IDs and tags are sanitized and include stable hash suffixes to avoid collisions. Recall uses strict tag matching so results stay inside the intended tenant, user, and Pattern scope.
+
+Finn configures each Hindsight bank before the first retain call with missions tuned for Finn:
+
+- user banks build a personal-intelligence picture of the user and their daily life: stable identity, relationships, family and household context, pets, ongoing projects, long-lived commitments, support needs, communication style, and what Finn already told the user, plus the smaller telling details of everyday life (interests, tastes, places, recurring habits). Durable facts are stored as stable understanding while evolving day-to-day texture is kept as lighter context, not promoted to permanent identity claims. Core operational profile fields such as display name, timezone, and durable home/base location remain in Postgres.
+- user banks explicitly ignore jokes, sarcasm, memes, teasing, banter, hyperbole, hypotheticals, assistant jokes, and claims Finn immediately treats as not factual. Passing moods and routine logistics (shopping lists, errands, one-word replies) are treated as transient: Finn may extract a durable preference or habit they reveal but not the literal message as a standing fact.
+- the observations layer maintains one canonical observation per distinct person, relationship, topic, interest, or constraint, strengthening the existing observation instead of creating near-duplicate fragments, and consolidates health/accessibility/life constraints into a single standing-constraints observation that states what each means in practice
+- user banks should preserve uncertainty and source attribution: vendors, support representatives, automated senders, companies, and incidental correspondents are not important relationships unless evidence shows personal significance; exact family labels require explicit support or correction
+- entity-label tagging assigns one best-fit `memory_domain` (a second only when a memory genuinely belongs to both), routes Finn operational/Pattern state to the `operational` domain so it never reads as personality, and reserves `durability:durable` for stable facts while daily logistics and moods map to `transient`
+- retained metadata is limited to a Personal-Intelligence allowlist (provenance, source scope, and dedup-critical IDs); raw source JSON blobs and unrelated keys are dropped so the extractor is not fed noise
+- Pattern banks retain durable cross-run outcomes, changed states, decisions, surfaced or intentionally unsurfaced findings, and dedupe-relevant facts for that Pattern only, keeping one canonical observation per outcome or trend
+- Pattern lifecycle activity feed events are retained in the user's main bank as operational state, not in Pattern banks and not as inferred personal commitments
+
+If bank creation or configuration fails, Finn does not retain the document. The failure is logged and runtime delivery continues.
+
+## What Finn Stores
+
+Finn automatically stores:
+
+- every handled/coalesced hot-path user turn after terminal turn handling, including visible Finn responses or `[no visible assistant response]`
+- attachment context that was part of the handled turn, including filename, MIME type, and extracted text or description when available
+- recurring Pattern run outcomes after scheduler notify policy is applied
+- Pattern lifecycle activity feed events after successful create, edit, pause, resume, or delete actions from the hot path, Pattern management, or the web app
+- selected Personal Intelligence source excerpts when the source passes connector-side selection and source-aware duplicate checks
+
+For Hindsight specifically, hot-path conversation memory is retained as newline-delimited JSON messages, not Finn's prompt transcript text. Each JSON message carries `role`, `content`, timestamps/message handles where available, assistant delivery state, and attachment context. Hindsight hot-path writes use a stable per-conversation-day document ID with append mode so a same-day iMessage session grows as one document instead of creating isolated per-message documents. Pattern activity feed writes use stable per-Pattern timeline document IDs with append mode, stable document metadata, and event-specific details only in the appended content. Personal Intelligence writes use stable source document IDs plus metadata for source toolkit, account, source type, source ID, message/thread/event IDs, connected-account perspective, and source direction. Recall includes Hindsight `world`, `experience`, and `observation` facts so Finn can use the full extracted memory set after a clean rebuild/backfill.
+
+Finn provisions a fixed set of Finn-managed Hindsight user mental models that act as an always-available synthesized profile portrait. On first use of each user bank per process, and when `MEMORY_PROVISION_MENTAL_MODELS` is true (the default), Finn idempotently creates any missing Finn-managed models (`user-identity`, `user-relationships`, `user-health-constraints`, `user-work-professional`, `user-personality-style`, `user-current-concerns`, `user-interests-aspirations`) with `trigger.refresh_after_consolidation` and `mode: "delta"` so they auto-resynthesize after each observation consolidation. Finn also provisions a small set of reflect directives that bias reflection toward synthesizing from partial evidence rather than abstaining. Provisioning is fail-open and never touches manually created models or directives. The hot path reads these models through `buildProfileContext` to populate the `<memory_profile>` envelope (static identity/relationships/health/work, dynamic concerns/interests/style), sanitized of IDs, tags, and provenance, in addition to compact semantic recall. Set `MEMORY_PROVISION_MENTAL_MODELS=false` to disable provisioning and the mental-model-backed profile context.
+
+Finn intentionally does not store:
+
+- internal tool calls, traces, reasoning, or drafts
+- full worker transcripts
+- failed or non-delivered assistant drafts as if they were user-visible facts
+- one-shot scheduled Pattern outcomes as Pattern continuity memory
+- model-controlled memory writes
+
+Model-controlled add, edit, and delete memory tools are not exposed initially. Finn writes memory only after the runtime knows what actually happened, which prevents models from storing speculation, private chain-of-thought-style process, or actions that were never delivered.
+
+## Tool Exposure
+
+Hindsight powers the same provider-neutral memory tools as Supermemory:
+
+| Runtime | Memory tools |
+|---|---|
+| Hot path | `search_memory` for user memory only, plus `reflect_memory` when Hindsight is the selected provider |
+| General worker | native `search_memory`, plus `reflect_memory` when Hindsight is the selected provider |
+| Pattern-management worker | native `search_memory`, plus `reflect_memory` when Hindsight is the selected provider |
+| Pattern worker | native `search_memory` and `reflect_memory`; Pattern runs may pass `scope: "pattern"` when the current run has Pattern continuity memory |
+
+All memory tools are read-only. Search tools return relevant memory facts/chunks for Finn's own prompt and tool flow. Hindsight reflect tools ask Hindsight to synthesize an answer from scoped Finn memory, but they are still exposed only through Finn's provider-neutral memory gateway and are omitted when the selected memory provider does not implement reflection.
+
+Finn uses direct Hindsight API calls instead of the Hindsight AI SDK integration because Finn already controls prompt assembly, tool visibility, retention timing, Pattern policy, and fail-open semantics. Direct calls keep memory behavior deterministic and scoped to Finn's runtime boundaries.
+
+## Backfill
+
+Use the provider-neutral backfill script to plan or execute historical memory ingestion.
+
+Dry-run first:
+
+```bash
+bun run memory:backfill --provider hindsight --kind all --since 2026-01-01T00:00:00Z
+```
+
+Execute after reviewing the plan:
+
+```bash
+bun run memory:backfill --provider hindsight --kind all --since 2026-01-01T00:00:00Z --execute
+```
+
+Useful options:
+
+| Option | Purpose |
+|---|---|
+| `--kind hot_path_turn` | backfill handled-turn memory only |
+| `--kind pattern_run_outcome` | backfill recurring Pattern outcome memory only |
+| `--tenant-id` | restrict to one tenant |
+| `--user-id` | restrict to one user |
+| `--limit` | cap records scanned per kind |
+| `--concurrency` | control concurrent provider writes |
+
+`user_profile_seed` is a Supermemory-only backfill kind. Hindsight keeps core profile fields in Postgres and skips that kind.
+
+`--provider hindsight` overrides `MEMORY_PROVIDER` for the process before config loads.
+
+## Failure Modes
+
+Hindsight failures fail open in Finn:
+
+- retain failures are logged and return `null`
+- recall failures return an empty tool result with an error string
+- message delivery, worker completion, Pattern notifications, backfill dry-runs, and compaction continue without provider memory
+
+Common checks:
+
+- verify `HINDSIGHT_BASE_URL` points at the Hindsight API service, not the Control Plane
+- verify `HINDSIGHT_API_KEY` matches the Hindsight API auth configuration when auth is enabled
+- check Hindsight API logs for retain or recall errors
+- check worker health if asynchronous retains stay queued
+- keep `HINDSIGHT_API_WORKER_ID` stable across restarts
+
+## Privacy Expectations
+
+Provider memory is not Finn's source of truth. Finn's authoritative data remains in Postgres and user-scoped workspaces. Hindsight stores extracted memory facts from app-controlled retained content inside isolated banks.
+
+Do not expose Hindsight provider mechanics to the end user in normal replies. Finn and workers should use recall silently when it materially improves the response or notification decision.
+
+## Next Reads
+
+- [Memory](/concepts/memory)
+- [Configuration](/operations/configuration)
+- [LLM Runtime Map](/reference/llm-runtime-map)

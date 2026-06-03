@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779427419594,
+      "tag": "0000_giant_thundra",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779844521435,
+      "tag": "0001_ambitious_nick_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779846856552,
+      "tag": "0002_seed_connector_catalog",
+      "breakpoints": true
+    }
+  ]
+}

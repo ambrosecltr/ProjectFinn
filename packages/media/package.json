@@ -1,0 +1,16 @@
+{
+  "name": "@finn/media",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@firecrawl/pdf-inspector": "^1.8.14",
+    "@finn/core": "workspace:*",
+    "@finn/db": "workspace:*",
+    "exceljs": "^4.4.0",
+    "mammoth": "^1.12.0"
+  }
+}

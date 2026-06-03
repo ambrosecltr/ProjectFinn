@@ -1,0 +1,14 @@
+{
+  "name": "@finn/patterns",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@finn/core": "workspace:*",
+    "@finn/db": "workspace:*",
+    "cron-parser": "^5.5.0"
+  }
+}

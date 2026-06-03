@@ -1,0 +1,214 @@
+---
+title: "Web API"
+description: "User-facing HTTP endpoints, public routes, file routes, and webhooks."
+---
+
+Finn exposes multiple HTTP surfaces. The user-facing application API lives under `/api/web`, but there are also file, webhook, and public asset routes.
+
+## Authentication Model
+
+Most `/api/web/*` endpoints require a valid `finn_session` cookie. Login itself is phone-number based and is initiated through the API.
+
+## Session And Auth Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/session` | `GET` | return current session user or `null`, plus Finn's configured Spectrum line number |
+| `/api/web/auth/request` | `POST` | send login code by iMessage |
+| `/api/web/auth/verify` | `POST` | verify code, create session, and return session payload |
+| `/api/web/auth/logout` | `POST` | destroy current session |
+
+Session payload shape:
+
+```json
+{
+  "user": {
+    "id": "usr_...",
+    "phoneNumber": "+15555555555",
+    "displayName": "Alex",
+    "timezone": "Australia/Brisbane",
+    "timezoneSource": "browser",
+    "location": "Brisbane, Australia"
+  },
+  "finnPhoneNumber": "+15551234567"
+}
+```
+
+`finnPhoneNumber` is the user's assigned Spectrum line when available, falling back to the optional dedicated line. When there is no valid session cookie, the same envelope is returned with `"user": null`.
+
+### Example login request
+
+```bash
+curl -X POST http://localhost:3000/api/web/auth/request \
+  -H 'Content-Type: application/json' \
+  -d '{"phoneNumber":"+15555555555"}'
+```
+
+## Profile Endpoint
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/profile` | `PATCH` | update display name, phone, timezone, and location |
+| `/api/web/profile/image` | `POST` | upload and store a user profile image |
+| `/api/web/onboarding/complete` | `POST` | mark onboarding complete for the current user |
+
+`timezoneSource` is `server`, `browser`, or `manual`. The web app automatically sends `browser` once after login when the profile is still using the server default; user-selected timezone changes should send `manual`.
+
+## My Day Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/my-day` | `GET` | read the user's current local-day summary and todos |
+| `/api/web/my-day` | `PATCH` | update the current My Day summary fields |
+| `/api/web/my-day/refresh` | `POST` | manually request a My Day refresh |
+| `/api/web/my-day/todos` | `POST` | create a manual My Day todo |
+| `/api/web/my-day/todos/:id` | `PATCH` | update todo title, status, or metadata |
+| `/api/web/my-day/todos/:id/handoff` | `POST` | hand a todo into the hot path for Finn to act on |
+| `/api/web/my-day/todos/:id` | `DELETE` | archive a todo so it is hidden from the UI |
+
+Opening or reading My Day does not start an LLM refresh. Manual refresh is explicit, and scheduled refreshes still follow `MY_DAY_REFRESH_TIMES`.
+
+## Pattern Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/patterns` | `GET` | list current user's patterns |
+| `/api/web/patterns` | `POST` | create a new scheduled Pattern |
+| `/api/web/patterns/:id` | `GET` | fetch one pattern |
+| `/api/web/patterns/:id/runs` | `GET` | list recent runs for one pattern |
+| `/api/web/patterns/:id` | `PATCH` | update selected editable Pattern fields in place while preserving the same Pattern record and run history |
+| `/api/web/patterns/:id/toggle` | `POST` | pause or resume a pattern |
+| `/api/web/patterns/:id/run` | `POST` | manually trigger a run |
+| `/api/web/patterns/:id` | `DELETE` | delete the pattern |
+
+`POST /api/web/patterns` creates scheduled Patterns with `triggerType: "schedule"`. The `schedule` payload stores user-local intent using the user's effective timezone; clients do not send a Pattern timezone override. Finn can recompute `nextRunAt` if the user's effective timezone changes through browser capture or a manual profile edit.
+
+Example interval schedule:
+
+```json
+{
+  "name": "Check overnight emails",
+  "taskPrompt": "Review inbox and summarize anything important.",
+  "triggerType": "schedule",
+  "schedule": {
+    "kind": "interval",
+    "every": 8,
+    "unit": "hours"
+  }
+}
+```
+
+For wall-clock schedules, send shapes such as `{"kind":"daily","time":"09:00"}`, `{"kind":"weekly","daysOfWeek":["monday","tuesday","wednesday","thursday","friday"],"time":"09:00"}`, or `{"kind":"monthly","dayOfMonth":"last","time":"17:00"}`. One-shot tasks use `{"kind":"once","localDateTime":"2026-05-15T09:00"}`.
+
+## Connector Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/connectors` | `GET` | list connectors for the current user |
+| `/api/web/connectors/authorize` | `POST` | request a connector auth URL |
+| `/api/web/connectors/notify` | `POST` | notify Finn after a connection completes |
+| `/api/web/connectors/:slug` | `GET` | fetch connector detail |
+| `/api/web/connectors/:slug/config` | `PATCH` | update permission mode and eligible feature automation toggles |
+| `/api/web/connectors/:slug/disconnect-impact` | `GET` | preview dependent Patterns or state affected by disconnecting |
+| `/api/web/connectors/:slug/reconnect` | `POST` | refresh or reconnect a connector |
+| `/api/web/connectors/:slug` | `DELETE` | disconnect a connector |
+| `/api/web/connectors/oauth/callback` | `GET` | connector auth redirect target used by the web app |
+
+Puter uses the connector config endpoint for pairing and source settings. Before a Mac is paired, web clients should treat Puter as setup-only and should not show iMessage or Notes toggles. Each Puter source has a general tool-access toggle and a separate Personal Intelligence toggle.
+
+Required primary mail connectors, currently Gmail or Outlook when required by onboarding, cannot be disconnected and cannot have My Day or Personal Intelligence disabled through the web API. For non-primary Composio connectors, `personalIntelligenceAvailable` is true only when a memory provider is configured and Finn has resolved a stable Personal Intelligence account identity for that connector. Connector config responses include `personalIntelligenceIdentityStatus` (`pending`, `resolved`, `failed`, or `unsupported`) and `personalIntelligenceAccount` when available so clients can explain why the Personal Intelligence toggle is unavailable.
+
+Example Puter pairing/config patch from the Mac app:
+
+```json
+{
+  "puter": {
+    "deviceId": "mac_...",
+    "imessageEnabled": true,
+    "imessagePersonalIntelligenceEnabled": true,
+    "notesEnabled": false
+  }
+}
+```
+
+## Puter Endpoints
+
+Puter endpoints require the same `finn_session` cookie as the web app. They are used by the paired Finn Puter Mac app to keep a live outbound WebSocket session.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/puter/socket-token` | `POST` | issue a short-lived WebSocket token for the paired Mac |
+| `/api/web/puter/socket?token=...` | `GET` | open Finn Puter's outbound WebSocket session |
+
+`/api/web/puter/socket-token` verifies that the posted random per-install `deviceId` belongs to the current user's paired Puter connector. Socket tokens are short-lived, capped, and bound to that tenant/user/device. Personal Intelligence checks that the Mac app has an active WebSocket session before exposing Puter iMessage or Notes tools.
+
+Puter does not batch-upload local records. Command results are produced live by the Mac app for the current Personal Intelligence run and returned over the active WebSocket session.
+
+## MCP Server Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/mcp-servers` | `GET` | list current user's MCP server definitions and connection status |
+| `/api/web/mcp-servers` | `POST` | create a user-scoped MCP server |
+| `/api/web/mcp-servers/:id` | `PATCH` | update a user-scoped MCP server |
+| `/api/web/mcp-servers/:id` | `DELETE` | remove a user-scoped MCP server |
+| `/api/web/mcp-servers/oauth/callback` | `GET` | OAuth callback target for MCP auth flows |
+
+User-scoped MCP secrets are stored server-side in the user's workspace secret files, not in shared MCP rows.
+
+## Library Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/web/library` | `GET` | list visible folders and files for the current folder |
+| `/api/web/library/folders` | `POST` | create a Library folder |
+| `/api/web/library/folders/:id` | `DELETE` | delete a Library folder |
+| `/api/web/library/files` | `POST` | upload a user-visible file |
+| `/api/web/library/files/:id` | `PATCH` | move a file or update its visibility |
+| `/api/web/library/files/:id` | `DELETE` | delete a file |
+
+`GET /api/web/library` accepts an optional `folderId` query param. The response includes the current folder, breadcrumbs, child folders, and user-visible files in that folder. Library endpoints only operate on the authenticated user's scoped data.
+
+## Webhook Endpoints
+
+### Composio
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/webhooks/composio` | `POST` | incoming connector trigger deliveries |
+
+Notes:
+
+- verifies webhook signature if `COMPOSIO_WEBHOOK_SECRET` is configured
+- looks up matching active patterns
+- triggers worker runs for each matching pattern
+
+## File Route
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/files/:tenantId/:userId/:fileId` | `GET` | stream a stored file |
+
+This is how generated media and normalized attachments are served back to clients and tools. Spectrum outbound media uses local files or buffers directly.
+
+## Public Asset Routes
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/public/finn/profile-photo` | `GET` | contact asset |
+| `/public/finn/contact-card.vcf` | `GET` | Finn contact card |
+
+## Route Ownership In Code
+
+| Route family | File |
+|---|---|
+| Web API | `packages/server/src/routes/web.ts` |
+| Webhooks | `packages/server/src/routes/webhooks.ts` |
+| Files | `packages/server/src/routes/files.ts` |
+| Public assets | `packages/server/src/routes/public-assets.ts` |
+
+## Next Reads
+
+- [Web App](/features/web-app)
+- [Admin API](/reference/admin-api)
+- [Deployment](/operations/deployment)

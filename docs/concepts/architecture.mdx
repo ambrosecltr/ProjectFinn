@@ -1,0 +1,155 @@
+---
+title: "Architecture"
+description: "How Finn is composed and how messages move through the system."
+---
+
+Finn runs as a Bun-based application server with in-process agents, shared infrastructure, and per-user runtime state.
+
+## High-Level Shape
+
+```text
+User iMessage
+   |
+   v
+Spectrum message stream
+   |
+   v
+Hono server
+   |
+    +-> Spectrum ingress
+    +-> webhook routes
+   +-> web API routes
+   +-> admin routes
+   +-> file routes
+   |
+   v
+Hot-path ingress coordinator
+   |
+   +-> user messages
+   +-> worker completions
+   +-> trigger deliveries
+   |
+   v
+Hot-path agent
+   |
+   +-> hot-path tools
+   +-> status block
+   +-> user profile context
+   +-> chapter history
+   |
+   +-> delegate work to workers
+   +-> send messages, reactions, media
+   |
+   v
+Worker manager -> worker agents
+   |
+   v
+Event bus -> persistence + delivery
+
+Postgres stores operational state and durable user context.
+```
+
+## The Core Runtime Decision
+
+Finn is not split into separate microservices. The server, workers, schedulers, and integration clients are created in one process from `packages/server/src/index.ts`.
+
+That keeps deployment simple, but it also means:
+
+- CPU-heavy or long-running tasks share the same process budget.
+- Workers are tracked in the database but do not resume after restart.
+- Event delivery is fast because it is in-process.
+
+## Boot Sequence
+
+At startup, the server does roughly this:
+
+1. load and validate config
+2. connect to Postgres
+3. create the LLM manager
+4. create Spectrum and integration clients
+5. initialize file storage
+6. initialize MCP service
+7. create user registry and runtime registry
+8. ensure the bootstrap user if configured
+9. start the Graphile scheduler runner
+10. wire event persistence and delivery
+11. mount HTTP routes
+
+Graphile Worker owns durable scheduler ticks and fanout jobs. The Pattern scheduler still owns Pattern-specific semantics for recurring scheduled Pattern runs, including wall-clock schedules, relative interval cadences, delayed starts, and one-shot scheduled runs. Composio trigger deliveries enter through the webhook layer and are matched against saved Patterns before Finn spawns a `pattern_worker`.
+
+## Message Flow
+
+### Inbound user messages
+
+1. Spectrum emits an iMessage `[space, message]` tuple.
+2. Finn accepts DM spaces, skips groups, and applies the optional sender allowlist.
+3. `MessageRouter` converts the message content into a typed inbound message.
+4. `UserRegistry` creates or reuses the user.
+5. The ingress coordinator debounces short bursts of user messages.
+6. Attachments are processed when the turn actually starts.
+7. The hot-path agent assembles prompt context and runs.
+8. The result is sent back through Spectrum.
+9. Conversation state and events are persisted.
+
+### Internal deliveries
+
+The hot path also receives:
+
+- worker completions
+- worker failures
+- external triggers
+- connector-enabled events
+
+These are queued behind active user turns so Finn does not interleave system chatter unpredictably.
+
+## Per-User Isolation
+
+Finn is designed around isolated user runtimes. Each user gets separate:
+
+- core profile data
+- conversations and chapters
+- workers and worker status
+- files
+- connectors and connector permissions
+- patterns and pattern runs
+- MCP server records
+
+This is one of the most important design choices in the app. It lets one deployment host multiple personal Finn experiences without mixing state.
+
+## Persistence Model
+
+Postgres stores operational truth, including:
+
+- users and sessions
+- chapters and messages
+- workers and worker results
+- events
+- patterns and pattern runs
+- files
+- connector configs
+- MCP server definitions
+
+Durable profile context, conversations, workers, files, connectors, and Patterns are all stored in Finn's own database-backed systems.
+
+## Why The Hot Path Matters
+
+The hot path is the only process that talks to the user. Workers never message directly. Triggers never message directly. The hot path receives internal outcomes and decides whether they are worth surfacing and how they should sound.
+
+That design keeps tone, timing, and irreversible actions centralized.
+
+## Shutdown Behavior
+
+On shutdown, Finn:
+
+1. stops the Graphile scheduler runner
+2. closes MCP connections
+3. shuts down user runtimes
+4. exits
+
+A hard timeout forces exit if shutdown hangs.
+
+## Next Reads
+
+- [Agents](/concepts/agents)
+- [Memory](/concepts/memory)
+- [Data Model](/reference/data-model)

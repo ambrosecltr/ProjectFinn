@@ -1,0 +1,241 @@
+---
+title: "Deployment"
+description: "How to run Finn locally, in Docker, and with public webhook access."
+---
+
+Finn is straightforward to run because the system is mostly one application process plus Postgres. Finn JS workspace runs model-authored JavaScript inside Secure Exec and routes durable actions through scoped Finn APIs.
+
+## Local Development
+
+The usual local loop is:
+
+```bash
+bun install
+cp .env.example .env
+docker compose up postgres -d
+bun run db:push
+bun run dev
+```
+
+If you are touching the web UI, also run:
+
+```bash
+bun run web:dev
+```
+
+## Docker Compose
+
+Finn ships separate compose files for the common deployment shapes:
+
+| File | Services | Use when |
+|---|---|---|
+| `docker-compose.yml` | Finn, Postgres, Cloudflared | Standard public deployment through Cloudflare Tunnel |
+| `docker-compose.no-cloudflared.yml` | Finn, Postgres | Dokploy, reverse proxy, or any host that already terminates HTTPS |
+| `docker-compose.hindsight.yml` | Finn, Postgres, Hindsight | Local/self-hosted Hindsight without Cloudflared |
+| `docker-compose.hindsight-cloudflared.yml` | Finn, Postgres, Hindsight, Cloudflared | Self-hosted Hindsight plus Cloudflare Tunnel |
+
+The standard compose file starts:
+
+- `finn`
+- `postgres`
+- `cloudflared`
+
+Run it with:
+
+```bash
+docker compose up -d
+```
+
+Run a non-Cloudflared install with:
+
+```bash
+docker compose -f docker-compose.no-cloudflared.yml up -d
+```
+
+Run with bundled Hindsight memory:
+
+```bash
+docker compose -f docker-compose.hindsight.yml up -d
+```
+
+Run with bundled Hindsight and Cloudflared:
+
+```bash
+docker compose -f docker-compose.hindsight-cloudflared.yml up -d
+```
+
+Cloudflared files require `CLOUDFLARE_TUNNEL_TOKEN`. Hindsight files require `HINDSIGHT_API_LLM_API_KEY` and set Finn's memory endpoint to `http://hindsight:8888` automatically.
+
+When Hindsight's Control Plane is exposed through a public reverse proxy such as Dokploy, also set `HINDSIGHT_CP_DATAPLANE_API_URL` so the dashboard knows which API origin to call. If Dokploy exposes both UI and API on the same service with separate domains, point it at the public API URL, for example `https://hs-api.example.com`. If the dashboard should talk to the internal compose service only, the default `http://hindsight:8888` is fine.
+
+The compose files use `expose` instead of fixed host `ports` to avoid conflicts on managed hosts such as Dokploy. Route your proxy to service `finn` on container port `3000`. If you run raw Docker locally and need direct host access, add a local override with `ports: ["3000:3000"]`.
+
+For local container development, `docker-compose.dev.yml` is standalone: it builds the development target, mounts the repo, exposes `${PORT:-3000}`, starts Postgres on `${POSTGRES_PORT:-5432}`, and loads `.env`. Run it with `docker compose -f docker-compose.dev.yml up --build`.
+
+## Dokploy
+
+Use a Dokploy **Compose** project for Finn. The app needs both the Finn container and Postgres, so deploying only the Dockerfile as a single application is easy to misconfigure.
+
+1. Create a new Dokploy project and choose Docker Compose.
+2. Point it at the Finn repository.
+3. Use `docker-compose.no-cloudflared.yml` from the repo unless Dokploy should also run Cloudflared.
+4. Set the app domain in Dokploy and make sure `PUBLIC_URL` uses that exact HTTPS URL.
+5. Add the required environment variables in Dokploy before the first deploy.
+
+Minimum environment:
+
+```env
+POSTGRES_PASSWORD=replace-with-a-long-random-password
+PUBLIC_URL=https://your-finn-domain.example
+SPECTRUM_PROJECT_ID=your-spectrum-project-id
+SPECTRUM_PROJECT_SECRET=your-spectrum-project-secret
+SPECTRUM_ALLOWED_NUMBERS=+15551234567
+DEFAULT_PROVIDER=anthropic
+DEFAULT_MODEL=anthropic:claude-sonnet-4-20250514
+DEFAULT_API_KEY=your-provider-api-key
+ADMIN_BEARER_TOKEN=replace-with-a-long-random-token
+WORKER_WORKSPACES_PATH=/data/workspaces
+```
+
+The compose file sets `DATABASE_URL` and `WORKER_WORKSPACES_PATH` for the containers, so you normally should not set those manually in Dokploy.
+
+If you want Dokploy to run Hindsight too, use `docker-compose.hindsight.yml` and also set:
+
+```env
+HINDSIGHT_API_LLM_API_KEY=your-hindsight-llm-key
+HINDSIGHT_API_LLM_PROVIDER=groq
+HINDSIGHT_API_LLM_MODEL=openai/gpt-oss-120b
+HINDSIGHT_CP_DATAPLANE_API_URL=https://your-hindsight-api-domain.example
+```
+
+For Dokploy with public Hindsight domains, configure routes separately:
+
+1. Route the Hindsight dashboard domain to service `hindsight` on container port `9999`.
+2. Route the Hindsight API domain to service `hindsight` on container port `8888`.
+3. Set `HINDSIGHT_CP_DATAPLANE_API_URL` to the public API domain from step 2.
+
+If you only expose the dashboard domain and leave the Control Plane pointed at `localhost:8888`, the Hindsight UI will load but API-backed actions in the browser will fail because `localhost` resolves in the visitor's browser, not inside the container.
+
+Dokploy should route traffic to service `finn` on container port `3000`. After deploy, check:
+
+```text
+GET https://your-finn-domain.example/health
+```
+
+If you deploy as a single Dockerfile app instead of Compose, you must create a separate Postgres database in Dokploy and set `DATABASE_URL` yourself. Compose is the recommended path because it also creates the persistent volumes Finn needs.
+
+If the build fails with `bun.lock: not found`, the deployed Git commit is missing the Bun lockfile. Commit `bun.lock` and redeploy; Docker intentionally installs from the lockfile so production builds are reproducible.
+
+## Tunnel Profile
+
+To expose a public URL locally, start the Cloudflare profile:
+
+```bash
+docker compose --profile tunnel up -d
+```
+
+This requires `CLOUDFLARE_TUNNEL_TOKEN`.
+
+## Persistent Data
+
+The compose file persists:
+
+- files
+- logs
+- postgres data
+
+And it bind-mounts:
+
+- `identity/`
+- `prompts/`
+- `skills/`
+
+That means prompt and identity changes do not require a full image rebuild.
+
+## Restart Matrix
+
+Use this rule of thumb:
+
+| Change | Command |
+|---|---|
+| TypeScript application code | `docker compose up -d --build finn` |
+| `identity/` or `prompts/` | `docker compose restart finn` |
+| `.env` | `docker compose up -d finn` |
+
+## Health And Verification
+
+Use:
+
+```text
+GET /health
+```
+
+For deeper status in running environments, use the admin API.
+
+## Production Checklist
+
+Before treating a deployment as real, verify these:
+
+1. `PUBLIC_URL` points to the public domain actually serving Finn.
+2. Spectrum project credentials are present.
+3. `SPECTRUM_ALLOWED_NUMBERS` contains the users this self-hosted deployment should provision, and `SPECTRUM_DEDICATED_LINE_PHONE` is set only when intentionally pinning a dedicated line.
+4. Postgres credentials are not using a weak default.
+5. `ADMIN_BEARER_TOKEN` is set.
+6. File storage is durable and has enough space.
+7. Required API keys are present for the features you expect to work.
+8. File storage is durable, backed up as needed, and sized for user workspaces plus generated artifacts.
+
+## Composio Production Notes
+
+If you use connectors and trigger-driven patterns:
+
+- configure `COMPOSIO_API_KEY`
+- configure `COMPOSIO_WEBHOOK_SECRET`
+- point Composio webhooks at `/webhooks/composio`
+- make sure `COMPOSIO_CALLBACK_URL` points at the web app connector completion route
+
+## Backups
+
+For Postgres, the simplest manual backup path is:
+
+```bash
+docker compose exec postgres pg_dump -U finn finn > backup.sql
+```
+
+You should also think about backing up the file store if generated assets and uploaded attachments matter to your deployment.
+
+## Observability
+
+Finn uses structured Pino logs and can emit OpenTelemetry when configured.
+
+Useful runtime signals include:
+
+- startup failures from config validation
+- webhook rejection reasons
+- worker concurrency and timeout behavior
+- pattern failure counts
+- MCP connection status
+
+## Failure Modes To Expect
+
+### Restart during worker execution
+
+Workers are not resumed after restart. Interrupted workers are reconciled as failed.
+
+### Wrong `PUBLIC_URL`
+
+This often breaks:
+
+- webhook delivery
+- connector callbacks
+- media delivery via file links
+
+### Missing optional integrations
+
+Finn degrades by omitting tools and capabilities. The server can still boot, but the affected feature family will be unavailable.
+
+## Next Reads
+
+- [Configuration](/operations/configuration)
+- [Admin API](/reference/admin-api)
+- [Connectors and Patterns](/features/connectors-and-patterns)

@@ -1,0 +1,13 @@
+.git
+node_modules
+dist
+packages/**/node_modules
+packages/**/dist
+packages/puter
+packages/admin
+packages/web/dist
+.DS_Store
+.env
+.env.*
+logs
+*.log

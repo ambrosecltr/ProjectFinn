@@ -1,0 +1,12 @@
+{
+  "name": "@finn/db",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@finn/core": "workspace:*"
+  }
+}

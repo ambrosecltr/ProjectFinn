@@ -1,0 +1,46 @@
+services:
+  finn:
+    image: finnai-finn-dev:latest
+    build:
+      context: .
+      target: development
+    command: bun run dev
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - finn-node-modules:/app/node_modules
+      - finn-logs:/data/logs
+      - finn-workspaces:/data/workspaces
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://finn:${POSTGRES_PASSWORD:-finnpass}@postgres:5432/finn
+      WORKER_WORKSPACES_PATH: /data/workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: finn
+      POSTGRES_USER: finn
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finnpass}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - finn-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finn -d finn"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  finn-node-modules:
+  finn-logs:
+  finn-db:
+  finn-workspaces:
+    name: finn-workspaces

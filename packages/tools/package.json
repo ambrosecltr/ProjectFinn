@@ -1,0 +1,18 @@
+{
+  "name": "@finn/tools",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@finn/core": "workspace:*",
+    "@finn/messaging": "workspace:*",
+    "@finn/integrations": "workspace:*",
+    "@finn/media": "workspace:*",
+    "@finn/runtime": "workspace:*",
+    "@finn/toolsets": "workspace:*",
+    "secure-exec": "0.2.1"
+  }
+}

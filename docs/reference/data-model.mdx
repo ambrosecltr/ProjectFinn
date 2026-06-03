@@ -1,0 +1,119 @@
+---
+title: "Data Model"
+description: "The main Postgres tables and how runtime state is persisted."
+---
+
+Finn persists operational state in Postgres. The main schema lives in `packages/db/src/schema.ts`.
+
+## Core Entities
+
+### Tenant and user identity
+
+| Table | Purpose |
+|---|---|
+| `tenants` | deployment tenancy root |
+| `users` | core profile fields, timezone/source, location |
+| `user_channels` | provider addresses such as Spectrum iMessage phone mappings |
+
+`users.metadata.profile.timezoneSource` is `server`, `browser`, or `manual`. `server` means the stored timezone is only the deployment fallback; `browser` is captured once by the web app after login; `manual` is a user-selected timezone and should not be overwritten automatically.
+
+## Web App Auth
+
+| Table | Purpose |
+|---|---|
+| `web_login_codes` | one-time phone login codes |
+| `web_sessions` | authenticated browser sessions |
+
+## Connectors And MCP
+
+| Table | Purpose |
+|---|---|
+| `user_connector_configs` | connector connection state and permission mode |
+| `personal_intelligence_accounts` | stable provider account identities used to scope Personal Intelligence across reconnects |
+| `mcp_servers` | user-scoped MCP server definitions |
+
+## Conversation State
+
+| Table | Purpose |
+|---|---|
+| `conversations` | chapter records and handoff summaries |
+| `messages` | persisted turns, token estimates, compaction flags |
+
+Important details:
+
+- messages track role and source separately
+- source can be user, worker, trigger, or system
+- messages can be marked compacted and grouped by compaction pass
+
+## Background Work
+
+| Table | Purpose |
+|---|---|
+| `workers` | worker lifecycle, result, state, and status detail |
+| `events` | event bus persistence for observability and delivery plumbing |
+
+Workers are useful to inspect because they show not only whether a task finished, but also whether completion has been delivered back into the conversational runtime.
+
+## Automation
+
+| Table | Purpose |
+|---|---|
+| `patterns` | automation definitions including trigger config, trigger filters, connector scope, notify condition, and worker type |
+| `pattern_runs` | execution history including worker correlation, trigger payload, skip reason, notify outcome, surfaced time, and tool scope |
+| `my_day_entries` | one row per user-local day with daily summary and refresh timestamp |
+| `my_day_todos` | My Day todo rows with status, source evidence, handoff timestamp, and optional worker handoff ID |
+| `automation_runs` | audit records for My Day refresh and Personal Intelligence ingestion, including optional connector scope for per-connector PI runs |
+| `personal_intelligence_sources` | retained-source ledger for Personal Intelligence dedupe and audit |
+| `personal_intelligence_checkpoints` | connector-agnostic Personal Intelligence coverage checkpoints by user/toolkit/stable account scope/source type |
+
+Pattern definitions are intended to be edited in place when possible so a single `patterns` row can retain the full `pattern_runs` history across schedule or trigger changes.
+
+`personal_intelligence_accounts` maps a connector's current provider connection to a stable account scope such as a Gmail email address, Microsoft Graph user ID, Slack team/principal, GitHub user, Linear organization/user, or the fixed Puter local account scope. This lets PI continue from the same source ledger and checkpoints after reconnects that change the provider connected-account ID but not the underlying account.
+
+`automation_runs` records scheduler/process runs that are not user-authored Patterns. It stores contributor status, accepted todo IDs, retained memory document IDs, skipped reasons, errors, and completion state for operational audit without logging raw connected-app bodies.
+
+`personal_intelligence_sources` records stable source identity and retained memory document IDs after Personal Intelligence saves a source. It is used to skip already-retained source records across runs. It stores source metadata and hashes, not raw email bodies, calendar descriptions, or issue/comment payloads.
+
+Personal Intelligence `automation_runs` rows set `toolkit_slug`, `account_scope_id`, and the current `connected_account_id` so scheduled cadence, audit, and failures can be reasoned about per stable account scope while still recording which provider connection performed the work. My Day rows leave those fields empty because My Day refreshes are still a whole-day/user process.
+
+`personal_intelligence_sources` and `personal_intelligence_checkpoints` use `account_scope_id` as the uniqueness boundary. The current `connected_account_id` remains on each row for provenance, but dedupe and incremental coverage follow the stable account scope.
+
+`personal_intelligence_checkpoints` stores coverage windows, source cursors, last processed source timestamps, compact handoff summaries, explored entities/projects, and known gaps for each user/toolkit/account-scope/source-type scope. It lets initial backfills stay bounded and future runs become incremental without depending on the memory provider as an operational ledger.
+
+My Day deletes archive rows rather than hard-deleting them. Open todos roll forward across days, completed todos are visible only on their local completion day, and archived todos are hidden from the UI while remaining available as dedupe context for future refreshes.
+
+## Files
+
+| Table | Purpose |
+|---|---|
+| `files` | stored attachment, upload, generated media, and workspace file metadata |
+| `file_folders` | user-scoped Library folder tree |
+
+`files.user_visible` controls whether a file appears in the web Library. User-sent files and files Finn sends back to the user should usually be visible. Worker scratch files, temporary downloads, logs, transcripts, and intermediate analysis artifacts should remain hidden.
+
+`files.folder_id` optionally points at a `file_folders` row for Library organization. Deleting a folder keeps file records but clears their folder assignment.
+
+## Mental Model For Relationships
+
+The most important relationships are:
+
+- one tenant has many users
+- one user has many channels, sessions, connectors, patterns, conversations, workers, file folders, and files
+- one conversation has many messages
+- one pattern has many pattern runs
+- one worker can be tied back to its parent conversation and related pattern run
+
+## Why This Schema Works Well For Finn
+
+It separates operational state from memory state.
+
+- Postgres tracks what the system is doing and stores the narrow operational profile.
+- Provider memory stores broader user understanding when configured.
+
+That separation makes debugging easier and keeps automation behavior inspectable.
+
+## Next Reads
+
+- [Architecture](/concepts/architecture)
+- [Memory](/concepts/memory)
+- [Admin API](/reference/admin-api)

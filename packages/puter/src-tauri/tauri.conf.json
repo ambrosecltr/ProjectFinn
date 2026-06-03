@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Finn Puter",
+  "version": "0.1.0",
+  "identifier": "ai.finn.puter",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build",
+    "devUrl": "http://127.0.0.1:4174",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "title": "Finn Puter",
+        "width": 503,
+        "height": 711,
+        "minWidth": 503,
+        "minHeight": 420,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "devCsp": "default-src 'self' http://127.0.0.1:4174; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:4174; style-src 'self' 'unsafe-inline' http://127.0.0.1:4174; img-src 'self' data: asset: http://asset.localhost http://127.0.0.1:4174; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4174 ws://127.0.0.1:4174; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "FinnPuter.entitlements",
+      "infoPlist": "Info.plist"
+    }
+  }
+}

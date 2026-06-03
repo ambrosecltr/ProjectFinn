@@ -1,0 +1,181 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Finn",
+  "description": "Documentation for Finn, an AI companion that lives in iMessage.",
+  "logo": {
+    "light": "/logo-light.svg",
+    "dark": "/logo-dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#0f766e",
+    "light": "#2dd4bf",
+    "dark": "#115e59"
+  },
+  "appearance": {
+    "default": "system"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "background": {
+    "decoration": "grid"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs"
+  },
+  "search": {
+    "prompt": "Search Finn docs"
+  },
+  "metadata": {
+    "timestamp": true
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "claude",
+      "cursor",
+      "vscode"
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Deploy on Mintlify",
+      "href": "/guides/publish-to-mintlify"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com"
+    },
+    "links": [
+      {
+        "header": "Docs",
+        "items": [
+          {
+            "label": "Quickstart",
+            "href": "/guides/quickstart"
+          },
+          {
+            "label": "Architecture",
+            "href": "/concepts/architecture"
+          },
+          {
+            "label": "Configuration",
+            "href": "/operations/configuration"
+          },
+          {
+            "label": "Mintlify publish guide",
+            "href": "/guides/publish-to-mintlify"
+          }
+        ]
+      },
+      {
+        "header": "Reference",
+        "items": [
+          {
+            "label": "Web API",
+            "href": "/reference/web-api"
+          },
+          {
+            "label": "Admin API",
+            "href": "/reference/admin-api"
+          },
+          {
+            "label": "Tools",
+            "href": "/reference/tools"
+          }
+        ]
+      }
+    ]
+  },
+  "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Quickstart",
+          "href": "/guides/quickstart",
+          "icon": "rocket"
+        },
+        {
+          "anchor": "Deploy to Mintlify",
+          "href": "/guides/publish-to-mintlify",
+          "icon": "cloud-upload"
+        }
+      ]
+    },
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Start Here",
+            "pages": [
+              "index",
+              "guides/quickstart",
+              "guides/project-structure",
+              "guides/docs-site",
+              "guides/publish-to-mintlify"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/agents",
+              "concepts/memory"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/messaging",
+              "features/web-app",
+              "features/connectors-and-patterns",
+              "features/personal-intelligence-and-my-day",
+              "features/puter",
+              "features/media"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "operations/configuration",
+              "operations/hindsight-memory",
+              "operations/deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Runtime Reference",
+            "pages": [
+              "reference/llm-runtime-map",
+              "reference/tools",
+              "reference/data-model"
+            ]
+          },
+          {
+            "group": "HTTP Reference",
+            "pages": [
+              "reference/web-api",
+              "reference/admin-api"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

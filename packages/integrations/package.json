@@ -1,0 +1,15 @@
+{
+  "name": "@finn/integrations",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@finn/core": "workspace:*",
+    "exa-js": "^2.12.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3"
+  }
+}

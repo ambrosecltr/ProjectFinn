@@ -1,0 +1,62 @@
+services:
+  finn:
+    build: .
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    volumes:
+      - finn-logs:/data/logs
+      - finn-workspaces:/data/workspaces
+      - ./identity:/app/identity
+      - ./prompts:/app/prompts
+      - ./skills:/app/skills
+    environment:
+      DATABASE_URL: postgresql://finn:${POSTGRES_PASSWORD:-finnpass}@postgres:5432/finn
+      WORKER_WORKSPACES_PATH: /data/workspaces
+      MEMORY_PROVIDER: hindsight
+      HINDSIGHT_BASE_URL: http://hindsight:8888
+    depends_on:
+      postgres:
+        condition: service_healthy
+      hindsight:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: finn
+      POSTGRES_USER: finn
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finnpass}
+    expose:
+      - "5432"
+    volumes:
+      - finn-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finn -d finn"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:latest
+    pull_policy: always
+    expose:
+      - "8888"
+      - "9999"
+    environment:
+      HINDSIGHT_API_LLM_API_KEY: ${HINDSIGHT_API_LLM_API_KEY:?HINDSIGHT_API_LLM_API_KEY is required for Hindsight compose files.}
+      HINDSIGHT_API_LLM_PROVIDER: ${HINDSIGHT_API_LLM_PROVIDER:-groq}
+      HINDSIGHT_API_LLM_MODEL: ${HINDSIGHT_API_LLM_MODEL:-openai/gpt-oss-120b}
+      HINDSIGHT_CP_DATAPLANE_API_URL: ${HINDSIGHT_CP_DATAPLANE_API_URL:-http://hindsight:8888}
+    volumes:
+      - hindsight-data:/home/hindsight/.pg0
+    stdin_open: true
+    tty: true
+
+volumes:
+  finn-logs:
+  finn-db:
+  finn-workspaces:
+    name: finn-workspaces
+  hindsight-data:

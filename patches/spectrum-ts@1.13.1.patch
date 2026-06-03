@@ -1,0 +1,53 @@
+diff --git a/dist/chunk-FPYXHZZA.js b/dist/chunk-FPYXHZZA.js
+index 63c5c1a..cb971bc 100644
+--- a/dist/chunk-FPYXHZZA.js
++++ b/dist/chunk-FPYXHZZA.js
+@@ -160,7 +160,8 @@ var spaceParamsSchema = z4.object({
+ });
+ var messageSchema = z4.object({
+   partIndex: z4.number().int().nonnegative().optional(),
+-  parentId: z4.string().optional()
++  parentId: z4.string().optional(),
++  text: z4.string().optional()
+ });
+ 
+ // src/providers/imessage/auth.ts
+@@ -641,7 +642,8 @@ var isIMessageMessage = (value) => {
+ };
+ var asProviderGroup = (items) => groupSchema.parse({ type: "group", items });
+ var buildMessageBase = (message, chatGuidHint, timestamp, phone) => {
+   const chat = resolveChatGuid(message, chatGuidHint);
++  const text2 = message.content.text;
+   return {
+     sender: { id: resolveSenderId(message) },
+     space: {
+@@ -649,7 +651,8 @@ var buildMessageBase = (message, chatGuidHint, timestamp, phone) => {
+       type: chat.includes(";+;") ? "group" : "dm",
+       phone
+     },
+-    timestamp
++    timestamp,
++    ...(text2 ? { text: text2 } : {})
+   };
+ };
+ var toAttachmentContent2 = (client, info) => asAttachment({
+diff --git a/dist/providers/imessage/index.d.ts b/dist/providers/imessage/index.d.ts
+index c412998..4f02fa1 100644
+--- a/dist/providers/imessage/index.d.ts
++++ b/dist/providers/imessage/index.d.ts
+@@ -74,6 +74,7 @@ declare const spaceSchema: z__default.ZodObject<{
+ type IMessageMessage = SchemaMessage<typeof userSchema, typeof spaceSchema> & {
+     partIndex?: number;
+     parentId?: string;
++    text?: string;
+ };
+ 
+ declare const imessage: Platform<PlatformDef<"iMessage", z.ZodUnion<readonly [z.ZodObject<{
+@@ -111,6 +112,7 @@ declare const imessage: Platform<PlatformDef<"iMessage", z.ZodUnion<readonly [z.
+ }, zod_v4_core.$strip>, z.ZodObject<{
+     partIndex: z.ZodOptional<z.ZodNumber>;
+     parentId: z.ZodOptional<z.ZodString>;
++    text: z.ZodOptional<z.ZodString>;
+ }, zod_v4_core.$strip>, IMessageMessage, undefined, {
+     background: (space: Space, input: BackgroundInput, opts?: {
+         mimeType?: string;

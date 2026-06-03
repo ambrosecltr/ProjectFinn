@@ -1,0 +1,175 @@
+---
+title: "Puter"
+description: "How Finn pairs with a Mac to use local iMessage and Notes context for Personal Intelligence."
+---
+
+Puter is Finn's macOS companion app. It lets a user pair a Mac with Finn so Personal Intelligence can inspect local-only knowledge such as iMessage and Notes.
+
+The first Puter slice is intentionally narrow:
+
+- pair one Mac app with the user's Finn account
+- expose iMessage and Notes source toggles
+- let Personal Intelligence inspect those sources through live commands
+- retain only selected durable user understanding through the normal Personal Intelligence memory path
+
+It does not yet expose files, screen control, app control, or general computer-use tools.
+
+## Architecture
+
+Puter has three moving parts:
+
+| Layer | Main code | Purpose |
+|---|---|---|
+| Mac app | `packages/puter/` | Tauri menu bar app, pairing UI, macOS permissions, local command execution |
+| Web connector | `packages/web/src/main.tsx` and `packages/server/src/routes/web.ts` | dedicated Puter connector tab, setup state, iMessage and Notes toggles after pairing |
+| Live bridge | `packages/server/src/puter-bridge.ts` | in-memory active-device tracking and command delivery between Personal Intelligence and the Mac app |
+
+The Mac app signs in through the same web session flow as the web app, stores the selected Finn host plus a random per-install device ID, keeps the copied web session token in macOS Keychain, then updates the user's Puter connector config with that device ID. The connector is represented with toolkit slug `puter` and connected account IDs shaped like `puter:<deviceId>`.
+
+## Pairing And Setup
+
+The web app exposes Puter in a dedicated connector-sheet tab. Before a Mac is paired, the Puter view is setup-only: it tells the user to open Finn Puter and sign in, and it does not show iMessage or Notes configuration controls.
+
+After the Mac app signs in and links the device:
+
+- Puter becomes connected in the connector sheet
+- the web app can show iMessage and Notes tool toggles
+- the Mac app can also toggle those same toolsets
+- each source has a separate Personal Intelligence opt-in
+- Personal Intelligence can run for opted-in Puter sources only when the Mac app is actively connected
+- if a scheduled Puter Personal Intelligence run is missed while the Mac is offline, the next socket connection defers the missed run once for the current local refresh window
+- the web status shows Offline when the paired Mac app's WebSocket is not active
+
+The server rejects web-side iMessage or Notes toggle changes before any Puter device is paired. The Mac app may create the initial paired connector row by sending its device ID.
+
+The Mac app persists non-secret setup state locally under the user's Application Support folder and stores the session token in Keychain. Closing the Puter window hides it; the menu bar item keeps the app running and maintains the outbound WebSocket even when no local source is enabled. The menu bar menu exposes Open Puter and Quit Puter, and Quit is the explicit app-exit path. The app must not expose manual Personal Intelligence sync controls; PI runs should start from the server scheduler or from the explicit source-level PI opt-in flow.
+
+The Mac app's status pill reflects the live socket state, not only web-session authentication. A signed-in app should show Connected only after the server sends the socket-ready message. Before the first socket-ready event, a failed socket-token or WebSocket attempt should show a retry view so the app does not loop forever on first open; after the first successful connection, later socket drops should reconnect automatically because laptop wake, tunnel startup, and stale sessions are normal runtime conditions.
+
+## macOS Permissions
+
+Puter uses normal macOS privacy controls. It does not bypass Transparency, Consent, and Control.
+
+The permission onboarding flow opens the relevant System Settings pane, shows a companion UI, and helps the user allow Finn Puter for the local sources they choose.
+
+Current local-source needs:
+
+- iMessage: Full Disk Access for the app that reads the local Messages database
+- Notes: macOS Automation access when Notes is queried through AppleScript
+
+The app should keep this flow natural and reassuring. If a permission is missing, show the user what to do and keep polling the actual permission state rather than assuming success.
+
+## Build The Mac App
+
+Finn Puter is built from the Tauri app in `packages/puter/`. Build it on macOS with Xcode Command Line Tools, Rust, and the repo's Bun dependencies installed.
+
+From the repo root:
+
+```bash
+bun install
+bun run --cwd packages/puter tauri build
+```
+
+The current bundle target is `app`, so a successful build writes the app bundle here:
+
+```text
+packages/puter/src-tauri/target/release/bundle/macos/Finn Puter.app
+```
+
+To move a development build to another Mac, zip the `.app` bundle first so macOS bundle metadata stays intact:
+
+```bash
+ditto -c -k --sequesterRsrc --keepParent "packages/puter/src-tauri/target/release/bundle/macos/Finn Puter.app" ~/Desktop/Finn-Puter.zip
+```
+
+Move the zip with AirDrop, scp, rsync, or any normal file transfer, then unzip it on the destination Mac. Development builds are not notarized unless signing and notarization are configured, so macOS may require right-clicking the app and choosing Open, or using Privacy & Security's Open Anyway action on first launch.
+
+When the app is running on a different Mac from the Finn server, enter the server's reachable web URL during Puter setup. For tunnel deployments, use the Cloudflare Tunnel host rather than `localhost`. Puter uses the same host for its WebSocket session, so the host must be reachable from the personal Mac.
+
+## Live Command Bridge
+
+Puter Personal Intelligence is live-command based. It must not upload or batch local iMessage/Notes records to Finn.
+
+The active flow is:
+
+1. Finn Puter requests a short-lived socket token over its authenticated web session.
+2. The socket-token request ensures the signed-in Mac device is paired to that same Finn user, repairing stale device ids without crossing user boundaries.
+3. Finn Puter opens an outbound WebSocket to `/api/web/puter/socket`.
+4. `PuterBridge` marks that tenant/user/device session active while the socket is connected.
+5. Web connector serialization reads the bridge status so paired-but-closed Macs show Offline.
+6. Web-side source config changes are pushed to the Mac app over the active socket.
+7. The socket connection notifies Personal Intelligence, which checks whether this Puter connector missed the most recent scheduled refresh slot.
+8. Before a Puter Personal Intelligence run starts, the server checks that the paired device is active.
+9. During the run, iMessage and Notes toolsets issue command requests through `PuterBridge`.
+10. The bridge sends each command over the socket with a command ID and run lease.
+11. The Mac app executes each requested command locally and sends the result back over the same socket.
+12. The Personal Intelligence model inspects those command results and decides what, if anything, to retain.
+
+This means Finn's server sees only command results requested for the current Personal Intelligence run window. It does not receive a background dump of the user's local databases.
+
+Multiple LLM processes can share one Puter socket. The bridge multiplexes commands by command ID, requires a per-run lease for every command, caps pending work per device, and queues per device so local iMessage/Notes reads stay predictable.
+
+The bridge is currently in-process memory. If Finn moves to multiple server processes or replicas, `PuterBridge` needs a durable or shared transport before Puter can be considered horizontally scalable.
+
+## Toolsets
+
+Puter iMessage and Notes are implemented as project-wide toolsets under `packages/toolsets/`.
+
+Current toolsets:
+
+- `puter.imessage`
+- `puter.notes`
+
+Each toolset has model-facing instructions plus an allowlisted command executor. Enabling a Puter source grants approved Finn LLM processes access to that source's live toolset while the paired Mac is active. Enabling the source for Personal Intelligence is a separate opt-in; Personal Intelligence loads only the Puter source toolsets that have that PI opt-in for the paired account. The runtime passes an `executeCommand` bridge into the toolset context so the executor talks live to the Mac app.
+
+The local-record executor path exists only for tests. Product behavior should use the live bridge for Puter.
+
+## Personal Intelligence Semantics
+
+Puter follows the same Personal Intelligence checkpoint and source-ledger model as other connectors:
+
+- initial runs use the configured bounded backfill window
+- later runs continue from stored checkpoints with overlap
+- disabling and re-enabling a source preserves checkpoint/source state while the stable Puter account scope is unchanged
+- retained items still go through recall and source-aware dedupe before memory writes
+
+The important difference is transport. Composio connectors load read-only SaaS tools. Puter loads project-local toolsets that execute live paired Mac commands.
+
+Scheduled Puter PI runs are deferred rather than lost when the Mac is offline. If the Mac is unavailable at the configured PI refresh time, the scheduled job skips Puter because no live socket exists. If the user enables a Puter source for PI while the Mac is offline, the config is saved but no PI run starts yet. When Finn Puter next connects, `PuterBridge` notifies `PersonalIntelligenceService`, which computes the most recent configured refresh slot in the user's timezone and checks the automation run ledger for the same Puter connector. It starts a live Puter PI run only when that refresh window has not already completed or the currently enabled Puter PI sources were not covered. The run still uses the normal checkpoint/source-ledger model, so a Mac that was offline for two days resumes from the previous successful coverage point and does not bulk upload local databases.
+
+## HTTP Surface
+
+The Puter HTTP routes live under `/api/web` and require the user's session cookie.
+
+| Endpoint | Purpose |
+|---|---|
+| `PATCH /connectors/puter/config` | pair a device and update Puter source toggles |
+| `POST /puter/socket-token` | issue a short-lived token for the paired Mac WebSocket |
+| `GET /puter/socket?token=...` | open the outbound Puter WebSocket session |
+
+Puter Personal Intelligence runs start from the server scheduler or from explicit source-level Personal Intelligence opt-in while the paired Mac has an active WebSocket. Puter does not expose manual sync, raw ingest, long-poll command, or HTTP command-result routes. Puter is project-owned and must be preserved by Composio connector sync; SaaS connector refreshes must not mark Puter disconnected.
+
+## Guardrails
+
+- Do not expose Puter iMessage or Notes tools unless the user has paired a Puter device and enabled the corresponding source.
+- Do not start Puter Personal Intelligence when the paired Mac app is inactive.
+- Do not trigger Puter PI on every reconnect; defer only the most recent missed refresh slot and dedupe against completed PI runs for that connector/window.
+- Use short-lived socket tokens issued from an authenticated session; do not authenticate sockets with only a device ID.
+- Cap outstanding socket tokens and queued commands so reconnect loops or stuck runs cannot grow unbounded in memory.
+- Keep Puter sessions keyed by tenant, user, and device so commands cannot bleed between users.
+- Store desktop session tokens in Keychain, not plaintext config files; host changes and sign-out must clear the token.
+- Keep Tauri CSP restrictive because the webview can invoke privileged native commands.
+- Clamp every local read to the server-provided Personal Intelligence window, and make direct-by-ID reads return nothing outside that window.
+- Filter iMessage reads to rows visible to the paired user. Exclude archived, deleted, recoverable, spam, retracted, blackholed, or deleted-chat rows when those columns/tables exist.
+- Run local data subprocesses such as `sqlite3`, `osascript`, and `base64` with timeouts and kill behavior.
+- Do not batch-upload local databases or raw records.
+- Do not add computer-control or file-access behavior to this first Puter scope.
+- Keep the source ledger/checkpoint model intact so pauses and re-enables remain incremental.
+- Keep user-facing Puter setup copy in the web app setup-only until a Mac is paired.
+
+## Next Reads
+
+- [Personal Intelligence And My Day](/features/personal-intelligence-and-my-day)
+- [Connectors And Patterns](/features/connectors-and-patterns)
+- [Tools](/reference/tools)
+- [Web API](/reference/web-api)

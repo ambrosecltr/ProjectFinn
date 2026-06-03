@@ -1,0 +1,25 @@
+{
+  "name": "@finn/server",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@finn/agents": "workspace:*",
+    "@finn/core": "workspace:*",
+    "@finn/db": "workspace:*",
+    "@finn/patterns": "workspace:*",
+    "@finn/integrations": "workspace:*",
+    "@finn/llm": "workspace:*",
+    "@finn/media": "workspace:*",
+    "@finn/messaging": "workspace:*",
+    "@finn/runtime": "workspace:*",
+    "@finn/tools": "workspace:*",
+    "@finn/toolsets": "workspace:*",
+    "ai": "^6",
+    "graphile-worker": "^0.16.6",
+    "hono": "^4"
+  }
+}

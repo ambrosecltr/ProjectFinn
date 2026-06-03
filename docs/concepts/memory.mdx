@@ -1,0 +1,134 @@
+---
+title: "Memory"
+description: "How Finn combines profile context, active conversation history, compaction, and optional provider recall."
+---
+
+Finn uses more than one kind of memory. That distinction matters because different layers solve different problems.
+
+## The Three Layers
+
+| Layer | Purpose | Backing store |
+|---|---|---|
+| Current turn context | What the model sees right now | In-memory prompt assembly |
+| Chapter history | Active conversation history over time | Postgres |
+| Profile memory | Core operational profile fields | Postgres |
+| Optional provider recall | Longer-term handled-turn, activity-feed, and recurring Pattern outcome search | Selected external memory provider, when configured |
+
+## Chapter History
+
+Conversation history is stored in Postgres as chapters and messages.
+
+Important characteristics:
+
+- history is scoped per user
+- conversations roll forward by day
+- old messages can be compacted into summaries
+- recent messages and summaries are reassembled into the hot-path prompt each turn
+
+This gives Finn continuity without requiring the full raw conversation every time.
+
+## Handoff Summaries And Compaction Summaries
+
+Two kinds of summaries matter in practice:
+
+- daily handoff summaries when a chapter rolls over
+- compaction summaries when old messages are compressed to free context
+
+Both are loaded into the system prompt before the next hot-path generation.
+
+Daily handoff summaries should stay focused on live personal continuity for the next day. They are not the place to restate durable profile facts or Pattern operations that already live elsewhere in runtime context.
+
+## Profile Memory
+
+Durable operational profile context comes from Finn's own user profile fields. The hot path injects that context alongside the current chapter summary, recent message history, current turn metadata, and operational status as structured internal prompt envelopes rather than raw user text.
+
+Profile memory is intentionally narrow: display name, phone, effective timezone, and durable home/base location. Broader user understanding such as work, preferences, hobbies, relationships, and communication style belongs in the configured memory provider. Active task status comes from workers, events, Patterns, and the hot-path status block.
+
+For Supermemory, Finn also writes one derived `user_profile_seed` document per user so Supermemory's provider-maintained profile starts from the same explicit facts Finn already knows. This seed is not authoritative storage. Postgres remains the source of truth, and the seed is rewritten only when its content hash changes. The seed includes display name, durable home/base location, and timezone when the timezone source is `manual` or browser-captured `browser`; it omits phone number and server-default timezone values.
+
+## Optional Provider Recall
+
+When `MEMORY_PROVIDER` selects an external provider, Finn augments its own conversation and Pattern systems with provider-backed search. This is optional and fail-open: missing or failing provider memory never blocks message delivery, worker completion, Pattern notification delivery, backfill planning, or compaction.
+
+Supported values are `none`, `supermemory`, and `hindsight`. Exactly one external provider can be active at a time. If both Supermemory and Hindsight are configured, Finn requires an explicit `MEMORY_PROVIDER` so startup cannot silently choose the wrong memory system.
+
+`MEMORY_MODE` controls how memory enters the hot path:
+
+- `hybrid` auto-recalls compact semantic user memories into trailing `semantic_memory` runtime context, injects provider-maintained profile context when available, and exposes hot-path memory tools.
+- `context` auto-recalls compact semantic user memories and provider-maintained profile context when available, but does not expose hot-path memory tools.
+- `tools` exposes hot-path memory tools only, with no automatic context injection.
+
+Auto-recalled context is capped, time-bounded, fail-open, semantic-only, and provider-formatted to avoid leaking provider internals such as Hindsight document IDs, Supermemory memory IDs, chunk IDs, tags, retained context prompts, or metadata blobs. Supermemory profile context is injected as a separate dynamic `memory_profile` envelope rather than mutating Finn's stable identity prompt. Query-specific recall remains in the `semantic_memory` envelope. Reflection is available only through explicit tools when the selected provider supports it.
+
+Provider storage is intentionally app-controlled:
+
+- Supermemory uses one provider container per Finn user through the official JavaScript SDK. It does not create separate containers for hot path, Patterns, days, sessions, or Pattern IDs. Scope is enforced with metadata filters. Finn writes raw context through Supermemory document ingestion, uses filtered writes to keep source-specific memory evolution scoped, reads compact user profile context through Supermemory profiles, and uses v4 search for fast memories/document recall.
+- Hindsight uses one bank per Finn user for user memory and operational activity-feed events, plus one isolated bank per Pattern for recurring Pattern outcome memory. Scope is enforced with bank IDs plus strict tags for tenant, user, source, and Pattern.
+
+Stored document granularity:
+
+- one document per handled/coalesced user turn after the hot-path turn reaches a terminal outcome
+- one derived user profile seed document for Supermemory when explicit profile facts exist
+- one per-Pattern activity timeline that appends successful Pattern create, edit, pause, resume, or delete actions
+- one document per recurring Pattern run outcome after the scheduler applies notify policy
+- no one-shot scheduled Pattern outcomes are stored as Pattern continuity memory
+
+Important metadata fields include `kind`, `source`, `tenantId`, `userId`, `day`, `conversationId`, `messageId`, `entityType`, `entityId`, `patternId`, `patternRunId`, `workerId`, `triggeredBy`, `notified`, and `surfaced`. Activity timeline documents keep lifecycle action details in content instead of document metadata so the document shape stays stable across days and state changes.
+
+Tool exposure is search-only when enabled by the selected memory mode:
+
+- hot path may receive `search_memory` for Finn's user memory: preferences, personal facts, communication style, history, prior context, and what Finn may already know or have told the user
+- workers may receive the same native `search_memory` tool for that user memory surface
+- Pattern workers may pass `scope: "pattern"` to `search_memory` or `reflect_memory`, scoped to prior outcomes for the current Pattern
+
+The user-memory tools currently search provider documents backed by delivered hot-path turns with `kind: hot_path_turn` and `source: hot_path`; that internal storage shape should not be presented to models as mere transcript search.
+
+Finn does not expose model tools to add, edit, or delete provider memory. Storage is app-controlled and happens after terminal runtime facts are known: handled hot-path turns after delivery, Supermemory profile seed syncs after profile/onboarding updates, Personal Intelligence items after source inspection and dedupe, recurring Pattern outcomes after scheduler notify policy, and Pattern lifecycle events through the activity feed. Supermemory memory/document update, forget, and delete operations are reserved for explicit user/admin maintenance flows, not LLM process tools.
+
+Existing Supermemory users can be seeded through the backfill script with `--kind user_profile_seed` or by running `all`; the seed uses a stable custom ID so reruns are idempotent at the provider boundary.
+
+Hindsight is integrated through direct API calls rather than the Hindsight AI SDK wrapper because Finn already owns prompt assembly, tool gating, turn recording, worker orchestration, Pattern policy, and fail-open behavior. Direct calls keep retention and recall aligned with Finn's runtime boundaries instead of letting a model wrapper decide what should be stored.
+
+For Hindsight deployment and operations details, see [Hindsight Memory Operations](/operations/hindsight-memory).
+
+## Attachment Context Counts Too
+
+Memory is not only text history. For attachment-heavy conversations, Finn also carries structured attachment context into the hot path and worker tasks:
+
+- stored `fileId`
+- MIME type
+- app-hosted file URL
+- extracted transcript or description
+
+That is what lets creative workers operate on the actual stored media instead of vague follow-up references.
+
+## Common Misunderstandings
+
+### Compaction is not long-term memory
+
+Compaction is a prompt-budget strategy. It helps the hot path keep enough usable history in context.
+
+### Workers do not share the hot-path chapter model
+
+Worker context is run-scoped. Workers do not use the same chapter compaction mechanism as the hot path.
+
+### Provider memory does not replace Finn's own memory
+
+Hot-path immediate continuity still comes from Finn's active conversation, chapter summaries, runtime status, profile fields, and current turn. Provider memory is an additional long-term recall surface, not the source of truth for conversation storage or compaction.
+
+## Where To Look In Code
+
+| Concern | Primary location |
+|---|---|
+| Prompt assembly | `packages/agents/src/hot-path.ts` |
+| Compaction | `packages/agents/src/compactor.ts` |
+| Message persistence | `packages/db/src/schema.ts` |
+| Provider memory interface and recorder | `packages/integrations/src/memory.ts` |
+| Supermemory provider implementation | `packages/integrations/src/supermemory.ts` |
+| Hindsight provider implementation | `packages/integrations/src/hindsight.ts` |
+
+## Next Reads
+
+- [Architecture](/concepts/architecture)
+- [Agents](/concepts/agents)
+- [Data Model](/reference/data-model)

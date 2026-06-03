@@ -1,0 +1,134 @@
+---
+title: "Personal Intelligence And My Day"
+description: "How Finn builds daily context, todos, and durable user understanding from connected apps."
+---
+
+Personal Intelligence and My Day are separate features that share connector controls and audit infrastructure.
+
+## My Day
+
+My Day is Finn's daily summary and todo surface. It works with only Postgres and does not require an external memory provider.
+
+Sources:
+
+- connected Gmail or Outlook when the connector's My Day setting is enabled
+- connected Google Calendar or Outlook Calendar when the connector's My Day setting is enabled
+- Pattern and reminder run history from Finn's own database
+- existing My Day todos
+- optional provider-neutral memory search or reflection when a memory provider is active
+
+Cadence:
+
+- Graphile Worker owns the durable scheduler jobs
+- the My Day scheduler checks existing users once per minute, then fans due work out to per-user Graphile jobs
+- a user's My Day refresh only runs when at least one connector with My Day enabled exists
+- refreshes run at the configured user-local times from `MY_DAY_REFRESH_TIMES`
+- connector connection or enabling My Day for a connector does not queue an immediate My Day refresh
+- the web API exposes a manual refresh endpoint, but opening the My Day sheet does not start an LLM run
+- the default scheduled times are 05:00, 11:00, and 17:00
+
+Automation rules:
+
+- the refresh can update the summary and add high-confidence todos
+- the refresh can edit or archive stale refresh-created todos that have not been handed off
+- generated todos must include source evidence and a reason
+- duplicate open, same-day completed, and recent archived todos are skipped
+- weak or generic candidates are skipped
+- each refresh tells the model the previous successful refresh time and a primary inspection window so connector reads can stay incremental where possible
+
+Todo lifecycle:
+
+- manual and generated todos live in Finn DB and remain available without any memory provider
+- open todos roll forward across days from their creation day
+- completed todos stay visible only on the user-local day they were completed
+- deleting from the UI archives the todo so it is hidden from the current list but retained as dedupe context
+- handoff from the UI routes a user-context message into the hot path; Finn can ask for clarification, delegate worker work, or mark the todo done through hot-path tools
+- once a todo has been handed off, it cannot be handed off again
+
+## Personal Intelligence
+
+Personal Intelligence is a memory-provider-backed process for durable user understanding. It is inactive unless a configured memory provider is available. SaaS connectors also require Composio, while Puter uses Finn's paired Mac bridge and project-local toolsets.
+
+Common high-signal sources:
+
+- Gmail
+- Outlook
+- Slack
+- GitHub
+- Linear
+- Puter iMessage
+- Puter Notes
+
+Relationship extraction should focus on core relationships and durable context, not every person the user has ever emailed or met. Any supported connector enabled for Personal Intelligence should still run through the same bounded, connector-scoped process.
+
+The ingestion service fans out to one run per enabled connector account scope. Composio-backed runs first verify a stable `accountScopeId` for the provider account, then use a scoped read-only Composio session containing only that connector. Puter uses a fixed Puter account scope for the paired Mac connector. Puter runs use only the project-local toolsets that have the source-level Personal Intelligence opt-in, and the model executes those toolsets through Finn JS workspace APIs such as `finn.puter.notes.searchNotes({ query: "Project Atlas" })` against the paired Mac app. The server parses and validates every typed operation before it reaches the live bridge. The ingestion prompt asks the worker model to inspect recent high-signal source material, inspect readable attachments on interesting emails/messages when the connector exposes attachment text, downloadable paths, or URLs, call memory recall before retention for dedupe, and retain durable findings incrementally through a provider-neutral tool. The retain tool performs a final source-aware duplicate recall and source-ledger check before writing. Retained items preserve source toolkit, source type, stable source ID, timestamp, title, selected excerpt, connected-account perspective, message direction, and the model's reason where the configured memory provider supports it.
+
+Scheduled Personal Intelligence uses a Graphile due-check job at `PERSONAL_INTELLIGENCE_REFRESH_TIMES` and then fans out to one Graphile execution job per due connector account scope. Each connector job performs the same final capability, connector-enabled, and daily dedupe checks before running so duplicate queued work is harmless.
+
+Personal Intelligence records retained-source metadata in `personal_intelligence_sources` for dedupe and audit. The ledger stores source IDs, titles, URLs, timestamps, run IDs, retained memory document IDs, source hashes, and flat provenance metadata; it does not store raw connector bodies.
+
+Personal Intelligence also maintains durable connector-agnostic coverage checkpoints in `personal_intelligence_checkpoints`. Each checkpoint is scoped by user, toolkit slug, stable account scope, and generic source type. The current provider connected-account ID is retained for audit/debug context but is not the checkpoint identity. Checkpoints record coverage start/end, last processed source timestamp, optional source cursor, the last successful run ID, compact explored entities/projects, known gaps, and a handoff summary. They do not store raw connector bodies.
+
+Initial ingestion is a bounded per-connector backfill using `PERSONAL_INTELLIGENCE_INITIAL_BACKFILL_MS`, defaulting to 30 days. After that account scope has checkpoints for its source scopes, future runs become incremental and start from the earliest previous coverage end minus `PERSONAL_INTELLIGENCE_INCREMENTAL_OVERLAP_MS`, defaulting to 6 hours. The overlap catches late-arriving source updates without inviting broad historical rescans. If a user disables Personal Intelligence for a connector and later re-enables it with the same stable account scope, the existing checkpoints and source ledger remain in place, so the next run is incremental rather than a new deep dive.
+
+Puter follows the same checkpoint and retained-source semantics, but it is not a batch ingestion path. Before a Puter Personal Intelligence run starts, the server verifies that the connector is paired to the requested device and that Finn Puter has an active outbound WebSocket session. During the run, iMessage and Notes tools talk through `PuterBridge`; the Mac app executes the requested command locally and returns only that command result. If the paired Mac is not active, Puter Personal Intelligence is skipped rather than queued against stale local data.
+
+The model receives previous handoff summaries plus the current run window. It should use memory first to understand known relationships, projects, responsibilities, and source IDs, then explore connector records through a bounded seed/probe/expand/verify/retain loop. When it notices an important person, project, household/family signal, repeated collaborator, or recurring obligation, it should do targeted follow-up searches within the current window before retaining. Relationship labels should stay evidence-backed; close-family or household signals are useful, but exact labels such as spouse or child require explicit support.
+
+Personal Intelligence runs can be long-running. `PERSONAL_INTELLIGENCE_TIMEOUT_MS` defaults to 30 minutes and the run uses worker-style model-message compaction so large connector tool outputs and long model histories are checkpointed rather than carried verbatim. Oversized connector tool outputs can be written to temporary artifacts for the run, and the model can inspect those artifacts locally through read-only Finn JS workspace files APIs such as `finn.files.read`, `finn.files.search`, or `finn.files.extract` before retaining concise source-backed facts.
+
+The process must not retain raw bulk mailbox dumps. It should skip promotions, newsletters, receipts, one-off logistics, and low-signal calendar noise. Mailbox/message retains must state that the source came from the user's connected account, whether it was sent/authored by the user or received/visible in the user's mailbox, who the sender was, and who the recipients were when available.
+
+Personal Intelligence should also retain durable cross-app work context when source records show active projects, workstreams, responsibilities, repeated work, or decisions. It should not dismiss that context solely because an individual ticket or calendar item is short-lived or already complete.
+
+## User Controls
+
+Connector settings store two independent booleans:
+
+- `myDayEnabled`
+- `personalIntelligenceEnabled`
+
+Both default to disabled for newly connected apps. The web app only exposes the Personal Intelligence toggle when an external memory provider is configured. Enabling Personal Intelligence queues ingestion for that connector only; it does not grant the run access to other enabled connectors.
+
+Primary mail connectors required by onboarding, currently Gmail or Outlook, are the exception. They stay connected with My Day and Personal Intelligence enabled and cannot be disconnected from the web connector sheet. Non-primary Composio connectors must have a resolved stable account identity before the UI enables Personal Intelligence; pending or failed identity resolution is shown as unavailable until the user reconnects or the resolver succeeds.
+
+## Audit And Privacy
+
+Both services write `automation_runs` rows with run type, user, state, window, contributor status, accepted todo IDs, retained document IDs, skipped reasons, and errors. Personal Intelligence rows also include `toolkit_slug`, `account_scope_id`, and the current `connected_account_id` so scheduled gating follows the stable account identity while audit history can still show the provider connection that ran.
+
+Logs include run IDs, user IDs, toolkit names, counts, and failure reasons. Logs must not include raw email bodies, calendar descriptions, or retained source content.
+
+My Day todo evidence is stored in Finn DB as concise source metadata so the UI can explain why a todo appeared. Personal Intelligence source content is sent only to the configured memory provider using provider-specific metadata/provenance support.
+
+## Failure Behavior
+
+Provider and connector failures are fail-open for user-facing basics:
+
+- My Day DB, summary, and manual todo functionality continue without memory
+- Personal Intelligence stays disabled when memory is unavailable; Composio-backed connectors also stay disabled when Composio is unavailable
+- Puter Personal Intelligence is skipped when the paired Mac app is not actively connected
+- scheduler errors are recorded in admin status and `automation_runs`
+- individual run failures do not block future runs
+
+## Operations
+
+Admin status includes `automation.myDay` and `automation.personalIntelligence` with enabled/running flags, scheduled times, intervals, and last error timestamps.
+
+Admin status also includes `automation.scheduler`, which reports Graphile runner state, concurrency, poll interval, and the latest scheduler task errors.
+
+Relevant config:
+
+- `MY_DAY_REFRESH_TIMES`, default `0500,1100,1700`
+- `PERSONAL_INTELLIGENCE_REFRESH_TIMES`, default `0000` (scheduled Personal Intelligence runs at most once per user-local day)
+- `PERSONAL_INTELLIGENCE_INITIAL_BACKFILL_MS`, default `2592000000` (30 days)
+- `PERSONAL_INTELLIGENCE_INCREMENTAL_OVERLAP_MS`, default `21600000` (6 hours)
+- `PERSONAL_INTELLIGENCE_TIMEOUT_MS`, default `1800000` (30 minutes)
+- `MEMORY_PROVIDER`, `MEMORY_MODE`, `SUPERMEMORY_API_KEY`, `HINDSIGHT_BASE_URL`, `HINDSIGHT_API_KEY`
+- `COMPOSIO_API_KEY`, `COMPOSIO_ALLOWED_TOOLKITS`
+
+## Next Reads
+
+- [Connectors And Patterns](/features/connectors-and-patterns)
+- [Puter](/features/puter)
+- [Memory](/concepts/memory)
+- [Admin API](/reference/admin-api)

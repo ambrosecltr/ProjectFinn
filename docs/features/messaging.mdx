@@ -1,0 +1,115 @@
+---
+title: "Messaging"
+description: "Inbound and outbound message handling through Spectrum and the hot path."
+---
+
+Messaging is the most visible part of Finn. Everything else exists to make the texting experience feel coherent.
+
+## Transport
+
+Finn uses Photon Spectrum for iMessage delivery.
+
+There are four main messaging components:
+
+- `SpectrumClient` for the long-lived Spectrum app and outbound actions
+- `SpectrumIngress` for supervising the inbound message stream and restarting it after terminal failures
+- `MessageRouter` for turning Spectrum messages into internal message objects
+- `MessageSender` for text, media, reactions, and typing indicators
+
+## Inbound Flow
+
+1. Spectrum emits `[space, message]` through the app message stream.
+2. Finn accepts iMessage DM spaces and skips unsupported platforms or groups.
+3. Finn rejects numbers outside `SPECTRUM_ALLOWED_NUMBERS` when an allowlist is configured.
+4. `MessageRouter` creates a typed inbound message.
+5. The ingress coordinator debounces and coalesces short bursts.
+6. The hot path processes the turn.
+
+`spectrum-ts` already reconnects retryable iMessage gRPC stream failures and catches up by event sequence. Finn also supervises the top-level app message stream: if the SDK stream ends or throws permanently, `SpectrumIngress` recreates the Spectrum app, resubscribes, and retries with bounded backoff.
+
+## Spectrum SDK Patch
+
+Finn carries a Bun patch for `spectrum-ts@1.13.1` at `patches/spectrum-ts@1.13.1.patch`.
+
+The patch exists because Spectrum's iMessage provider drops `message.text` when an inbound iMessage contains attachments. Without it, text+photo sends can arrive in Finn as an image-only turn, losing the user's caption. The patch keeps that text as provider metadata, and `MessageRouter` also has a fallback that recovers text/caption fields from raw/custom/group-shaped Spectrum payloads.
+
+Remove the patch only after Spectrum upstream preserves text on iMessage attachment and grouped attachment messages. Before removing it, run the `MessageRouter` caption regression tests without the patch and confirm they still pass.
+
+## Why Ingress Coalescing Exists
+
+Users often send multiple short bubbles in quick succession. Finn does not need to race each bubble independently.
+
+The ingress coordinator waits briefly, combines a short burst into one turn, and preserves individual message handles so tapbacks still target the right original bubble.
+
+The key settings are:
+
+- `HOT_PATH_INGRESS_USER_GROUPING_WINDOW_MS`
+- `HOT_PATH_INGRESS_MAX_COALESCE_MESSAGES`
+
+## Outbound Behavior
+
+The hot path can send:
+
+- one or more text bubbles
+- a tapback reaction
+- stored media by `fileId`
+- a typing indicator while work is in progress
+
+Finn intentionally uses one message bubble per `send_message` tool call. If it wants to feel like natural texting, it sends multiple short bubbles, not one giant newline-separated blob.
+
+## Reactions
+
+Supported tapbacks are:
+
+- `love`
+- `like`
+- `dislike`
+- `laugh`
+- `emphasize`
+- `question`
+
+Reactions are transport actions. Finn should use the `react` tool, not write reaction text into the conversation.
+
+## Voice Notes
+
+When the right integrations are configured, Finn supports voice-heavy interaction.
+
+### Inbound
+
+- audio arrives through Spectrum as `voice` or `attachment` content
+- the attachment processor normalizes the bytes
+- Deepgram transcribes it if configured; Finn can still receive the audio when Deepgram is absent
+- the turn context distinguishes iMessage voice notes from ordinary audio files
+- when STT is absent, Finn sees that it cannot hear the voice/audio content and should tell the user naturally
+
+### Outbound
+
+- if ElevenLabs is configured, the hot path can explicitly set `voice_message: true` on `send_message`
+- Finn synthesizes that text, converts it to `.caf`, stores it locally, and sends it as Spectrum voice content
+- normal text is still the default, even after inbound voice; voice replies are for explicit user requests or when audio is clearly the better fit
+
+## Attachments
+
+Inbound attachments are normalized into Finn's file store before workers use them.
+
+Important examples:
+
+- HEIC and HEIF images are converted to JPEG
+- audio and video can be transcribed when Deepgram is available
+- images can be described for context
+
+This keeps downstream worker behavior stable, especially for creative tasks.
+
+## First-Message Behavior
+
+When a brand new Spectrum sender creates a user runtime, Finn can send a native contact card first so the thread starts with a stable contact entry.
+
+## Security And Rate Limiting
+
+Spectrum Cloud authenticates through project credentials and delivers messages through the SDK stream. Finn still applies its own allowlist before user creation and keeps outbound sends behind a small rate limiter.
+
+## Next Reads
+
+- [Media](/features/media)
+- [Architecture](/concepts/architecture)
+- [Tools](/reference/tools)

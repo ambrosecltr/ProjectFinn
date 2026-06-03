@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSAppDataUsageDescription</key>
+  <string>Finn Puter reads your local Messages database at ~/Library/Messages/chat.db when iMessage is enabled. Enable Full Disk Access in System Settings &gt; Privacy &amp; Security so the app can read it.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Finn Puter uses Apple Events to read Apple Notes only when Notes is enabled as a local source.</string>
+  <key>NSContactsUsageDescription</key>
+  <string>Finn Puter uses Contacts to match local Messages handles to saved names and your own sending aliases.</string>
+</dict>
+</plist>

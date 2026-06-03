@@ -1,0 +1,337 @@
+---
+title: "Configuration"
+description: "Environment variables, defaults, and what each part of the runtime needs."
+---
+
+The source of truth for runtime config is `packages/core/src/config.ts`. This page follows that file, not older ad hoc notes.
+
+## How Config Loading Works
+
+Finn reads environment variables at startup, validates them with Zod, and caches the parsed result. If a required value is missing or malformed, startup fails immediately.
+
+## Required To Boot
+
+These settings are the minimum viable configuration. Finn fails startup if any are missing or malformed.
+
+| Variable | Notes |
+|---|---|
+| `SPECTRUM_PROJECT_ID` | required |
+| `SPECTRUM_PROJECT_SECRET` | required |
+| `PUBLIC_URL` | required and must be a valid URL |
+| `DATABASE_URL` | required |
+| `DEFAULT_PROVIDER` | required; `anthropic`, `openai`, `fireworks`, or `deepseek` |
+| `DEFAULT_MODEL` | required; provider-prefixed model string |
+| `DEFAULT_API_KEY` | required; API key for `DEFAULT_PROVIDER` |
+
+With only these values, Finn can receive and send iMessages, store files, use profile/conversation context, and run all LLM processes on the same model/provider. Optional integrations only become available when their own config is present.
+
+## Spectrum And User Access
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SPECTRUM_PROJECT_ID` | none | Spectrum project ID |
+| `SPECTRUM_PROJECT_SECRET` | none | Spectrum project secret |
+| `SPECTRUM_ALLOWED_NUMBERS` | unset | comma-separated self-hosted allowlist; users are created in Finn and Spectrum at boot |
+| `SPECTRUM_DEDICATED_LINE_PHONE` | unset | optional Business/dedicated iMessage line for explicit routing |
+| `USER_PHONE_NUMBER` | unset | optional bootstrap user |
+| `USER_TIMEZONE` | server timezone | fallback timezone while a user has no browser-captured or manual timezone |
+
+For shared-pool Spectrum Cloud, leave `SPECTRUM_DEDICATED_LINE_PHONE` unset. Spectrum assigns each allowed user a line during provisioning, Finn stores that assignment in `user_channels.metadata`, and the web app returns that assigned line as `finnPhoneNumber` for `Text Finn`.
+
+## Base URLs And Server
+
+| Variable | Default |
+|---|---|
+| `PUBLIC_URL` | none; must be set explicitly |
+| `PORT` | `3000` |
+| `HOST` | `0.0.0.0` |
+
+`PUBLIC_URL` matters for:
+
+- Composio callback and trigger patterns
+- file delivery URLs
+- public asset URLs such as the contact card
+
+## Database
+
+| Variable | Default |
+|---|---|
+| `DATABASE_URL` | none; required |
+
+Finn-owned application tables are managed by Drizzle migrations. The local Docker Compose Postgres service uses `postgresql://finn:finnpass@localhost:5432/finn` by default. Graphile Worker manages its own private `graphile_worker` schema at server startup before scheduler jobs start; do not add Graphile's internal tables to Finn's Drizzle schema.
+
+## Model Configuration
+
+Every runtime process resolves from the default model/provider/key unless a process-specific override is set.
+
+| Variable | Default |
+|---|---|
+| `DEFAULT_PROVIDER` | none; required |
+| `DEFAULT_MODEL` | none; required |
+| `DEFAULT_API_KEY` | none; required |
+| `DEFAULT_MAX_CONTEXT_TOKENS` | `128000` |
+| `DEFAULT_MAX_OUTPUT_TOKENS` | unset |
+| `DEFAULT_REASONING_EFFORT` | unset; DeepSeek only |
+| `HOT_PATH_MODEL` | `DEFAULT_MODEL` |
+| `HOT_PATH_PROVIDER` | `DEFAULT_PROVIDER` |
+| `HOT_PATH_API_KEY` | `DEFAULT_API_KEY` |
+| `HOT_PATH_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
+| `HOT_PATH_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
+| `HOT_PATH_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; DeepSeek only |
+| `WORKER_MODEL` | `DEFAULT_MODEL` |
+| `WORKER_PROVIDER` | `DEFAULT_PROVIDER` |
+| `WORKER_API_KEY` | `DEFAULT_API_KEY` |
+| `WORKER_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
+| `WORKER_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
+| `WORKER_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; DeepSeek only |
+| `COMPACTOR_MODEL` | `DEFAULT_MODEL` |
+| `COMPACTOR_PROVIDER` | `DEFAULT_PROVIDER` |
+| `COMPACTOR_API_KEY` | `DEFAULT_API_KEY` |
+| `COMPACTOR_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
+| `COMPACTOR_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
+| `COMPACTOR_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; DeepSeek only |
+
+Supported providers:
+
+- `anthropic`
+- `openai`
+- `fireworks`
+- `deepseek`
+
+The provider and model string need to agree. If they do not, startup validation should fail.
+
+Legacy provider-key envs such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `FIREWORKS_API_KEY` are no longer read by the runtime. Put the active key in `DEFAULT_API_KEY`, or use the process-specific `*_API_KEY` override when a process uses a different provider/account.
+
+## Runtime Capabilities
+
+`loadConfig()` exposes `config.capabilities` as the source of truth for boot, LLM, integration, and core tool availability. It is derived from validated config so prompt factories and tool factories can gate behavior without rereading environment variables.
+
+The capability map currently includes:
+
+- `capabilities.boot`: required boot subsystems that are guaranteed present after startup
+- `capabilities.llm`: resolved provider/model per LLM process
+- `capabilities.integrations`: optional integration availability such as Exa, Fal, Composio, Deepgram, ElevenLabs, and the selected memory provider
+- `capabilities.tools`: core hot-path and worker tool families that should be visible to LLM runtimes
+
+Runtime gating is intentionally one-directional: missing optional configuration removes the matching integration clients, tools, and prompt instructions instead of exposing fallback tools that fail later. `GET /admin/status` returns both the raw `capabilities` map and a derived `runtimeGating` summary with enabled and disabled integration, media, and tool families for quick inspection.
+
+## Optional Integrations
+
+| Variable | Default | Enables |
+|---|---|---|
+| `EXA_API_KEY` | unset | worker research tools |
+| `FAL_API_KEY` | unset | worker image/video tools |
+| `COMPOSIO_API_KEY` | unset | worker external-service tools and connector-backed Patterns |
+| `DEEPGRAM_API_KEY` | unset | inbound audio transcription |
+| `ELEVENLABS_API_KEY` | unset | hot-path voice replies |
+| `MEMORY_PROVIDER` | inferred from configured provider, otherwise `none` | selected optional memory provider: `none`, `supermemory`, or `hindsight` |
+| `MEMORY_MODE` | `tools` | hot-path memory behavior: `hybrid`, `context`, or `tools` |
+| `MEMORY_AUTO_RECALL_TIMEOUT_MS` | `3000` | fail-open timeout for hot-path auto-recall (hybrid/context modes) |
+| `MEMORY_AUTO_RECALL_MAX_RESULTS` | `8` | max auto-recall results injected into hot-path context |
+| `MEMORY_PROVISION_MENTAL_MODELS` | `true` | provision Finn-managed Hindsight mental models and reflect directives |
+| `SUPERMEMORY_API_KEY` | unset | search-only long-term recall tools and asynchronous handled-turn/Pattern outcome storage |
+| `SUPERMEMORY_BASE_URL` | `https://api.supermemory.ai` | optional Supermemory API base URL override |
+| `HINDSIGHT_BASE_URL` | unset | Hindsight API URL for hosted or self-hosted Hindsight memory |
+| `HINDSIGHT_API_KEY` | unset | optional Hindsight API key sent as `Authorization: Bearer <key>` |
+
+External memory providers are deliberately separate from Finn's Postgres-backed profile, conversation, and compaction systems. Exactly one memory provider can be active at a time. Provider errors are logged and fail open.
+
+Selection behavior:
+
+- `MEMORY_PROVIDER=none` disables external memory even if provider credentials exist.
+- `MEMORY_PROVIDER=supermemory` requires `SUPERMEMORY_API_KEY`.
+- `MEMORY_PROVIDER=hindsight` requires `HINDSIGHT_BASE_URL`; `HINDSIGHT_API_KEY` is optional so local unauthenticated Hindsight deployments can work.
+- if one provider is configured and `MEMORY_PROVIDER` is unset, Finn infers that provider.
+- if multiple providers are configured and `MEMORY_PROVIDER` is unset, startup fails.
+
+## Graphile Scheduler
+
+Scheduled automation execution runs through Graphile Worker using the same Postgres database as Finn. The runner starts in-process with the server, applies Graphile's own migrations, and owns durable recurring scheduler jobs. Pattern schedule semantics, Pattern run history, My Day summaries/todos, and Personal Intelligence audit rows still live in Finn's own tables.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GRAPHILE_WORKER_CONCURRENCY` | `4` | maximum Graphile jobs executed concurrently in this server process |
+| `GRAPHILE_WORKER_MAX_POOL_SIZE` | `10` | Postgres pool size for Graphile Worker |
+| `GRAPHILE_WORKER_POLL_INTERVAL_MS` | `1000` | polling interval for future/retry jobs |
+| `SCHEDULER_PATTERN_TICK_MS` | `60000` | recurring Pattern due-check cadence |
+| `SCHEDULER_MY_DAY_TICK_MS` | `60000` | My Day due-check cadence |
+| `SCHEDULER_PERSONAL_INTELLIGENCE_TICK_MS` | `300000` | Personal Intelligence due-check cadence |
+| `SCHEDULER_MY_DAY_JITTER_MS` | `1200000` | deterministic post-due jitter window for scheduled per-user My Day refresh jobs |
+| `SCHEDULER_PERSONAL_INTELLIGENCE_JITTER_MS` | `3600000` | deterministic post-due jitter window for scheduled per-connector Personal Intelligence jobs |
+
+The recurring jobs use stable Graphile job keys so process restarts replace stale scheduled ticks instead of creating duplicates. My Day due checks fan out to per-user jobs; Personal Intelligence due checks fan out to per-user/per-connector jobs. Scheduled fanout jobs use deterministic post-due jitter so users sharing the same local refresh time are spread across the configured window. Manual/admin refreshes and connector-triggered Personal Intelligence enable ingestion run immediately.
+
+Hot-path memory modes:
+
+- `hybrid` auto-recalls compact semantic user memory into runtime context and exposes memory tools.
+- `context` auto-recalls compact semantic user memory into runtime context but hides hot-path memory tools.
+- `tools` exposes memory tools without automatic context injection.
+
+For Hindsight hosted and self-hosted setup, see [Hindsight Memory Operations](/operations/hindsight-memory).
+
+## Turn Limits
+
+| Variable | Default |
+|---|---|
+| `HOT_PATH_MAX_TURNS` | `20` |
+| `WORKER_MAX_TURNS` | `20` |
+| `COMPACTOR_MAX_TURNS` | `5` |
+
+## Hot-Path Ingress
+
+| Variable | Default |
+|---|---|
+| `HOT_PATH_INGRESS_USER_GROUPING_WINDOW_MS` | `500` |
+| `HOT_PATH_INGRESS_MAX_COALESCE_MESSAGES` | `5` |
+
+## Worker Limits
+
+| Variable | Default |
+|---|---|
+| `WORKER_TIMEOUT_MS` | `900000` |
+| `BACKGROUND_LLM_TIMEOUT_MS` | `WORKER_TIMEOUT_MS` |
+| `WORKER_MAX_CONCURRENT` | `5` |
+| `WORKER_MAX_TOOL_CALLS` | `50` |
+
+## Automation Cadence
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MY_DAY_REFRESH_TIMES` | `0500,1100,1700` | comma-separated user-local My Day refresh times as `HHMM` or `HH:MM` |
+| `PERSONAL_INTELLIGENCE_REFRESH_TIMES` | `0000` | comma-separated user-local Personal Intelligence refresh times as `HHMM` or `HH:MM`; scheduled ingestion runs at most once per user-local day |
+| `PERSONAL_INTELLIGENCE_INITIAL_BACKFILL_MS` | `2592000000` | bounded initial Personal Intelligence lookback window, default 30 days |
+| `PERSONAL_INTELLIGENCE_INCREMENTAL_OVERLAP_MS` | `21600000` | overlap subtracted from prior coverage when planning incremental Personal Intelligence runs, default 6 hours |
+| `PERSONAL_INTELLIGENCE_TIMEOUT_MS` | `1800000` | maximum duration for a Personal Intelligence LLM ingestion run, default 30 minutes |
+| `PERSONAL_INTELLIGENCE_MAX_STEPS` | `120` | maximum one-step LLM/tool iterations for a Personal Intelligence ingestion run |
+
+My Day remains available without memory. Personal Intelligence only runs when a selected memory provider is configured; Composio-backed connector runs additionally require Composio, while Puter runs require an active paired Mac bridge. Personal Intelligence does not run an immediate startup backfill; scheduled runs use the user-local refresh times above and run at most once per user-local day/account scope, while manual runs use the admin refresh endpoint. Personal Intelligence runs are scoped per enabled connector account scope, so one connector's completed run does not suppress another connector's daily run.
+
+## Worker Workspaces
+
+Worker file storage remains local and user-scoped under `WORKER_WORKSPACES_PATH/{tenantId}/{userId}`, with server-only runtime state under `.finn/` and LLM-visible files under `workspace/`. Finn JS workspace runs inside Secure Exec and reaches durable files only through granted Finn APIs such as `finn.files.*`.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `WORKER_WORKSPACES_PATH` | `./workspaces` | local per-user workspace root |
+
+The Docker image includes Bun for Finn itself and the local media/document-processing binaries required by runtime tools.
+
+Local non-Docker runs also need the media and document-processing binaries that the Docker image installs: `ffmpeg`, `poppler-utils`, `tesseract-ocr`, `libreoffice`, `libheif-examples`, and `ocrmypdf`. These power voice conversion, image/video preparation, HEIC conversion, document extraction, PDF text extraction, and OCR.
+
+## Context And Compaction
+
+| Variable | Default |
+|---|---|
+| `HOT_PATH_MAX_CONTEXT_TOKENS` | `128000` |
+| `HOT_PATH_HISTORY_TOKEN_BUDGET` | `12000` |
+| `HOT_PATH_HISTORY_MESSAGE_TOKEN_BUDGET` | `4000` |
+| `HOT_PATH_CURRENT_TURN_TOKEN_BUDGET` | `12000` |
+| `HOT_PATH_CHAPTER_SUMMARY_TOKEN_BUDGET` | `8000` |
+| `HOT_PATH_HANDOFF_INPUT_TOKEN_BUDGET` | `12000` |
+| `HOT_PATH_DAILY_ROLLOVER_HOUR` | `4` |
+| `HOT_PATH_DAILY_ROLLOVER_MINUTE` | `0` |
+| `COMPACTION_BUFFER_TOKENS` | `4000` |
+| `COMPACTION_BATCH_BACKGROUND` | `20` |
+| `COMPACTION_BATCH_AGGRESSIVE` | `40` |
+| `COMPACTION_BATCH_EMERGENCY` | `30` |
+| `COMPACTION_MAX_PASSES` | `3` |
+| `COMPACTION_THRESHOLD_WARN` | `0.70` |
+| `COMPACTION_THRESHOLD_BACKGROUND` | `0.80` |
+| `COMPACTION_THRESHOLD_AGGRESSIVE` | `0.90` |
+| `COMPACTION_THRESHOLD_EMERGENCY` | `0.95` |
+
+Validation enforces sensible ordering of thresholds and ensures the context max is larger than the reserve buffer.
+
+## File Storage
+
+| Variable | Default |
+|---|---|
+| `MAX_FILE_SIZE_MB` | `100` |
+
+Stored files live inside each user's worker workspace under `files/`.
+
+## MCP
+
+| Variable | Default |
+|---|---|
+| `MCP_CONFIG_PATH` | `./mcp.json` |
+| `BROWSER_USE_API_KEY` | unset |
+
+`MCP_CONFIG_PATH` is for startup/admin compatibility. User-scoped MCP server records live in the database.
+
+## Optional Integrations
+
+### Exa
+
+| Variable | Purpose |
+|---|---|
+| `EXA_API_KEY` | enables Exa-backed web search |
+
+### Fal
+
+| Variable | Default |
+|---|---|
+| `FAL_API_KEY` | none |
+| `FAL_IMAGE_GEN_MODEL` | `openai/gpt-image-2` |
+| `FAL_IMAGE_EDIT_MODEL` | `openai/gpt-image-2/edit` |
+| `FAL_VIDEO_GEN_MODEL` | `bytedance/seedance-2.0/text-to-video` |
+| `FAL_IMAGE_TO_VIDEO_MODEL` | `bytedance/seedance-2.0/image-to-video` |
+| `FAL_VIDEO_EDIT_MODEL` | `bytedance/seedance-2.0/reference-to-video` |
+
+### Composio
+
+| Variable | Purpose |
+|---|---|
+| `COMPOSIO_API_KEY` | enables Composio runtime support |
+| `COMPOSIO_CALLBACK_URL` | auth completion redirect target |
+| `COMPOSIO_ALLOWED_TOOLKITS` | optional allowlist |
+| `COMPOSIO_WEBHOOK_SECRET` | verifies Composio trigger webhooks |
+
+### Voice
+
+| Variable | Purpose |
+|---|---|
+| `DEEPGRAM_API_KEY` | speech-to-text |
+| `ELEVENLABS_API_KEY` | text-to-speech |
+| `ELEVENLABS_VOICE_ID` | target voice |
+| `ELEVENLABS_MODEL_ID` | defaults to `eleven_turbo_v2_5` |
+
+## Intervals And Ops
+
+| Variable | Default |
+|---|---|
+| `PATTERN_CIRCUIT_BREAKER_THRESHOLD` | `3` |
+| `ADMIN_BEARER_TOKEN` | unset |
+| `LOG_LEVEL` | `info` |
+| `TELEMETRY_PROVIDER` | `posthog` when `POSTHOG_API_KEY` is set, otherwise `none` |
+| `POSTHOG_API_KEY` | unset |
+| `POSTHOG_HOST` | `https://us.i.posthog.com` |
+| `OTEL_SERVICE_NAME` | unset in config, `finn` in `.env.example` |
+| `OTEL_SERVICE_VERSION` | unset in config, `1.0.0` in `.env.example` |
+| `CLOUDFLARE_TUNNEL_TOKEN` | unset |
+
+Telemetry provider options are:
+
+- `none`
+- `posthog`
+
+PostHog is the only supported telemetry backend. `posthog` mode uses `POSTHOG_API_KEY` and optional `POSTHOG_HOST` for AI SDK LLM analytics through `@posthog/ai`; logs remain standard application logs.
+
+Finn's AI SDK telemetry attaches stable PostHog identity metadata per call. User-scoped traces use `posthog_distinct_id = finn:<tenantId>:<userId>`, and non-user-scoped process telemetry falls back to `finn:system:<processType>`. Additional metadata such as `$ai_session_id`, `tenantId`, `userId`, `processType`, `conversationId`, `workerId`, and `runId` is attached when available so PostHog queries can correlate runs reliably.
+
+The PostHog OpenTelemetry processor is wrapped by Finn's span filter. Only spans with Finn's telemetry marker, spans that inherit the Finn baggage marker, and child spans in those Finn-marked traces are exported. This keeps broad runtime or dependency instrumentation from sending unrelated traces to PostHog.
+
+- `debug`
+- `info`
+- `warn`
+- `error`
+
+## Notes On `.env.example`
+
+The example env file should be treated as a convenience template, not as a stronger authority than the config loader. In this docs pass it was aligned with the live config defaults where it had drifted.
+
+## Next Reads
+
+- [Deployment](/operations/deployment)
+- [Web API](/reference/web-api)
+- [Admin API](/reference/admin-api)

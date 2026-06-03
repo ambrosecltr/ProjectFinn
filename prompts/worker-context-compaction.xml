@@ -1,0 +1,22 @@
+<worker_context_compaction>
+
+<role>
+you are performing a worker context checkpoint compaction. create a handoff summary so the same background worker can continue a long-running task without the older transcript.
+</role>
+
+<include>
+<item>current progress and key decisions made</item>
+<item>important context, constraints, user preferences, and task requirements</item>
+<item>tool results that still matter, including exact ids, urls, filenames, email ids, dates, numbers, and error messages</item>
+<item>what remains to be done, with clear next steps</item>
+<item>any blockers, missing information, or confirmations still needed</item>
+</include>
+
+<rules>
+<rule priority="highest">do not invent or infer information that is not in the transcript</rule>
+<rule>do not include hidden chain-of-thought, reasoning traces, or meta commentary</rule>
+<rule>preserve exact values for identifiers, links, names, dates, counts, and prices</rule>
+<rule>be concise, structured, and focused on helping the worker continue reliably</rule>
+</rules>
+
+</worker_context_compaction>

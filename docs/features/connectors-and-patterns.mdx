@@ -1,0 +1,135 @@
+---
+title: "Connectors And Patterns"
+description: "How Finn connects to external apps and turns triggers into worker runs."
+---
+
+Connectors and patterns are what turn Finn from a conversational assistant into an automation system.
+
+## Connectors
+
+Finn uses Composio to manage authenticated access to external SaaS tools such as Gmail, Google Calendar, and Drive. Puter is the exception: it is a Finn-owned Mac companion connector that pairs through the web session and talks to the local Mac app through Finn's live bridge.
+
+Important properties of the connector model:
+
+- connectors are scoped per Finn user
+- allowed toolkits can be limited globally with `COMPOSIO_ALLOWED_TOOLKITS`
+- the hot path does not get Composio tools directly
+- workers get Composio tools dynamically at runtime for the current user
+- Puter iMessage and Notes are exposed through project-local toolsets only when a paired Mac app is active
+
+## Connector Lifecycle
+
+At a high level:
+
+1. user starts connector auth from the web app
+2. Finn requests a Composio authorization URL
+3. user completes the external auth flow
+4. web app confirms the connection state
+5. Finn syncs connector config into Postgres
+6. scheduled background automation uses the synced connector config on its next eligible run
+
+Connector config also stores permission mode so the product can distinguish between narrower and broader access patterns.
+
+Connector config also stores feature-level automation settings. My Day and Personal Intelligence have independent toggles so a user can allow a connector for daily planning without allowing memory ingestion, or vice versa. New connectors default both toggles off. Turning My Day on for a connector changes the next scheduled My Day run; it does not run an LLM process immediately. Turning Personal Intelligence on can queue a scoped ingestion run for that connector only. See [Personal Intelligence And My Day](/features/personal-intelligence-and-my-day).
+
+Primary mail connectors required by onboarding are a special case. Gmail or Outlook are kept as primary connectors when required, their My Day and Personal Intelligence settings stay enabled, and the web API rejects disconnects or attempts to turn either automation off. Other Composio connectors can enable Personal Intelligence only after Finn resolves a stable account identity for the connected provider account.
+
+Puter has a dedicated connector-sheet tab with a setup-only web state until the Mac app links a device to the user's account. The iMessage and Notes toggles appear only after pairing, and Puter Personal Intelligence runs only while that paired Mac is actively connected. See [Puter](/features/puter).
+
+## Patterns
+
+Patterns are user-scoped automations. Each pattern combines:
+
+- a trigger
+- a worker type
+- a user-facing description
+- a worker-facing task prompt
+- connector scope for Composio toolkits and user MCP servers
+- schedule or trigger metadata
+- optional trigger filters
+- a notify condition
+- connector scope for external app and MCP access
+
+When the trigger fires, Finn creates a worker run and routes the result back through the normal worker delivery path.
+
+When Finn creates a Pattern from chat, the worker should return structured setup data copied from `finn.patterns.create` so the hot path can confirm the setup without guessing. For scheduled Patterns this includes the persisted `nextRun`; for Composio/event-triggered Patterns `nextRun` is usually `null`, and Finn should describe them as waiting for the trigger rather than inventing a scan time.
+
+## Trigger Types
+
+Finn currently supports two trigger families:
+
+- `schedule`
+- `composio`
+
+### Scheduled patterns
+
+These are scheduled automations. Stored trigger metadata can represent:
+
+- one-shot user-local tasks
+- wall-clock schedules such as daily, weekly, weekdays, specific weekdays, and monthly recurrences
+- interval cadences such as every 8 hours
+- delayed starts such as starting Friday or starting next month
+
+Scheduled Pattern configs store canonical local-time intent, not raw due instants. `nextRunAt` is an indexed absolute timestamp computed from that intent. Schedule values always use the user's effective timezone: manual timezone when set, browser-captured timezone when available, and the system default while unset. Active user-timezone schedules are recomputed when the user's effective timezone changes.
+
+### Composio patterns
+
+These are external app event triggers backed by Composio. Finn stores the resulting trigger id so it can pause, resume, or delete the remote trigger later.
+
+## Webhook Requirements
+
+For Composio-triggered patterns to work, you need:
+
+- `COMPOSIO_API_KEY`
+- `COMPOSIO_WEBHOOK_SECRET`
+- `PUBLIC_URL`
+
+Composio must deliver events to:
+
+```text
+<PUBLIC_URL>/webhooks/composio
+```
+
+`COMPOSIO_CALLBACK_URL` is separate. It is used for connector auth completion, not trigger delivery.
+
+## Pattern Lifecycle
+
+1. pattern exists in `patterns`
+2. scheduler or webhook decides it should run
+3. `pattern_runs` gets a new execution record
+4. trigger filters can skip the run before a worker is spawned
+5. a `pattern_worker` is spawned with Pattern-specific context and scoped tools
+6. the worker must finish with a notify outcome
+7. the scheduler validates the notify contract and applies the notify condition server-side
+8. hot path only surfaces the run when the validated notify outcome says to
+9. circuit-breaker logic can pause unhealthy patterns after repeated failure
+
+`pattern_runs` is not just a log. It stores trigger payload, skip reason, worker correlation, notify outcome, tool scope, and whether the result was surfaced to the user. That history is what lets recurring Patterns avoid duplicate notifications and reason about prior runs.
+
+When a Pattern definition needs to change, Finn should usually edit the existing Pattern in place rather than delete and recreate it. Preserving the same Pattern row keeps `pattern_runs` continuity available for dedupe and stale-notification avoidance across schedule or trigger changes.
+
+When an external memory provider is active, successful Pattern lifecycle changes are emitted as provider-neutral activity feed events after create, edit, pause, resume, and delete actions from the hot path, Pattern management, or the web app. These events are user-scoped operational state, so Hindsight stores them in the user's main bank rather than the Pattern-specific bank. The memory subscriber is event-driven and fail-open; a provider retain failure must not block the Pattern mutation.
+
+When an external memory provider is active, recurring Pattern run outcomes are also recorded asynchronously after notify policy is applied. Supermemory stores these records in the user's single provider container with Pattern metadata filters. Hindsight stores them in an isolated Pattern bank for that Finn user and Pattern. Both providers retain metadata such as `kind: pattern_run_outcome`, `patternId`, `patternRunId`, `notified`, and `surfaced`. One-shot scheduled Pattern outcomes are not stored as Pattern continuity memory.
+
+## Important Safety Behavior
+
+- pausing a Composio-triggered pattern disables the remote trigger
+- resuming it can re-enable that trigger
+- deleting a pattern removes the corresponding remote trigger when needed
+- deleting a connector can delete dependent patterns tied to that connected account
+
+## Why Workers Sit Behind Patterns
+
+Patterns do not directly execute business logic. They only trigger worker runs. That is a good separation because:
+
+- the same worker behavior can be reused by chat delegation and automation
+- results still pass through the same status and delivery system
+- failure handling stays centralized
+
+## Next Reads
+
+- [Web App](/features/web-app)
+- [Puter](/features/puter)
+- [Web API](/reference/web-api)
+- [Admin API](/reference/admin-api)

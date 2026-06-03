@@ -1,0 +1,136 @@
+---
+title: "Finn Documentation"
+description: "Overview, concepts, operations, and API reference for Finn."
+---
+
+Finn is an AI companion that lives in iMessage. It handles real-time conversation through a hot-path agent, delegates longer work to background workers, runs saved Patterns for scheduled or trigger-driven automations, and stores runtime state in Finn's own Postgres-backed systems.
+
+<CardGroup cols={2}>
+  <Card title="Start locally" icon="rocket" href="/guides/quickstart">
+    Get Finn running with the smallest practical local setup.
+  </Card>
+  <Card title="Deploy on Mintlify" icon="cloud-upload" href="/guides/publish-to-mintlify">
+    Connect this repo to Mintlify and publish the docs site from the `docs/` directory.
+  </Card>
+  <Card title="Understand the runtime" icon="workflow" href="/concepts/architecture">
+    See how the hot path, workers, webhooks, memory, and file delivery fit together.
+  </Card>
+  <Card title="Operate the system" icon="settings" href="/operations/configuration">
+    Use the config and deployment guides as the operational source of truth.
+  </Card>
+</CardGroup>
+
+The product is opinionated in two ways:
+
+1. It is built to feel like texting a person, not operating a dashboard.
+2. It is built as a runtime system, not just a prompt wrapper.
+
+That means the docs need to cover both the user-facing behavior and the machinery behind it. This site is organized around that split.
+
+## What Finn Actually Is
+
+At runtime, Finn is a Bun monorepo with these major pieces:
+
+- A Hono server that receives webhooks, serves files, hosts the web app API, and wires the system together.
+- A hot-path agent that handles incoming messages in real time.
+- Background workers that do longer or tool-heavy tasks.
+- A Pattern scheduler plus Pattern workers for saved automations.
+- Finn Puter, a paired Mac app that lets Personal Intelligence inspect local iMessage and Notes through live commands.
+- A compactor that keeps the hot-path prompt inside context limits.
+- A Postgres database for operational state.
+- Inbuilt profile, conversation, file, worker, connector, and Pattern systems.
+- Optional integrations for search, media generation, connected SaaS tools, speech, and MCP servers.
+
+Although Finn is framed as a personal AI companion, the server can manage multiple isolated user runtimes behind the same deployment. Each user gets their own profile, conversations, workers, patterns, connectors, and files.
+
+## Read This First
+
+If you are new to the repo, start here:
+
+- [Quickstart](/guides/quickstart) for the fastest working local setup.
+- [Project Structure](/guides/project-structure) for where code, prompts, and integrations live.
+- [Architecture](/concepts/architecture) for the system-level mental model.
+
+If you are editing behavior:
+
+- [Agents](/concepts/agents) explains hot path, workers, and compaction.
+- [Memory](/concepts/memory) explains profile context, chapters, and summaries.
+- [Messaging](/features/messaging) explains ingress, sending, reactions, and voice.
+
+If you are operating or deploying Finn:
+
+- [Configuration](/operations/configuration) is the source-of-truth environment guide.
+- [Deployment](/operations/deployment) covers local, containerized, tunnel, and production concerns.
+- [Admin API](/reference/admin-api) documents health and ops endpoints.
+
+## Recommended Paths
+
+### I want Finn running quickly
+
+1. [Quickstart](/guides/quickstart)
+2. [Configuration](/operations/configuration)
+3. [Deployment](/operations/deployment)
+
+### I want to understand how the system works
+
+1. [Architecture](/concepts/architecture)
+2. [Agents](/concepts/agents)
+3. [Memory](/concepts/memory)
+4. [Data Model](/reference/data-model)
+
+### I want to ship these docs on Mintlify
+
+1. [Docs Site](/guides/docs-site)
+2. [Publish to Mintlify](/guides/publish-to-mintlify)
+
+## Documentation Map
+
+### Guide
+
+- Start Here: overview, quickstart, repo layout, and Mintlify setup.
+- Core Concepts: architecture, agents, and memory.
+- Features: messaging, web app, connectors and patterns, Personal Intelligence, Puter, and media.
+- Operations: configuration and deployment.
+
+### Reference
+
+- Runtime Reference: tools and database model.
+- HTTP Reference: web API and admin API.
+
+## System Snapshot
+
+```text
+iMessage <-> Spectrum <-> Hono server
+                           |
+                           +-> hot-path ingress coordinator
+                           |
+                           +-> hot-path agent
+                           |     |
+                           |     +-> hot-path tools
+                           |     +-> user profile + chapter history
+                           |     +-> compactor checks
+                           |
+                           +-> worker manager
+                           |     |
+                           |     +-> worker agents
+                           |     +-> Composio / Exa / Fal / MCP / exec / files / skills
+                           |
+                           +-> web API and admin API
+                           |
+                           +-> Puter live bridge <-> Finn Puter Mac app
+                           |
+                           +-> file routes and public assets
+
+Postgres stores operational state and durable user context.
+```
+
+## What Changed In This Docs Pass
+
+This documentation set was rewritten to be:
+
+- Structured around how the product actually works today.
+- Tied to code paths such as `packages/core/src/config.ts` and `packages/server/src/routes/*`.
+- Split into guide material and reference material.
+- Ready to preview and validate with Mintlify from the repo itself.
+
+For the docs toolchain itself, see [Docs Site](/guides/docs-site).

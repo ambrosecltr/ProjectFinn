@@ -1,0 +1,15 @@
+{
+  "name": "@finn/agents",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@finn/core": "workspace:*",
+    "@finn/db": "workspace:*",
+    "@finn/llm": "workspace:*",
+    "ai": "^6"
+  }
+}

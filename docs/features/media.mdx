@@ -1,0 +1,87 @@
+---
+title: "Media"
+description: "Attachment handling, file storage, voice, and creative generation."
+---
+
+Finn treats media as first-class runtime input, not as an afterthought.
+
+## The Media Pipeline
+
+1. Spectrum provides inbound media bytes through content readers.
+2. `MessageRouter` converts them into typed attachments.
+3. `AttachmentProcessor` normalizes them.
+4. Files are stored through `FileStorage`.
+5. Finn extracts useful context.
+6. Hot path or workers use the stored file references.
+7. Generated output is stored and can be sent back with `send_media`.
+
+## File Storage
+
+Finn stores files locally and serves them through `GET /files/:tenantId/:userId/:fileId`.
+
+Important details:
+
+- file metadata is persisted
+- every stored file is user-scoped by tenant and user
+- `userVisible` controls whether a file appears in the web Library
+- `folderId` places visible files in Library folders
+- public file URLs depend on `PUBLIC_URL` for web/client access
+- generated media is sent through Spectrum from local files or buffers
+- operational worker downloads should go to `tmp/` unless they are user-facing deliverables
+
+## Normalization
+
+The media pipeline smooths over awkward input formats.
+
+The main example is HEIC and HEIF image conversion. Finn converts those still images to JPEG so downstream models and tools have a more reliable source format. Large image attachments may also be compressed before storage.
+
+## Extracted Context
+
+Finn tries to turn raw media into something the agents can reason about.
+
+Examples:
+
+- image description
+- audio transcript
+- video transcript
+- document text or markdown from PDFs, DOCX files, spreadsheets, HTML, and common Office files
+- file metadata summary
+
+That extracted context is part of why follow-up edits and creative delegation work well.
+
+Document extraction stays local. Worker runtimes that are allowed to inspect documents use the `files` toolkit's `extract` command, which parses files in-process with local libraries and binaries. Text-based PDFs use the local PDF extraction path, scanned or flattened PDFs can use OCRmyPDF/Tesseract, DOCX uses Mammoth, spreadsheets use ExcelJS or delimited-text parsing, and older Office formats are converted through LibreOffice when available. Connector-provided URL reads reject private/internal network targets, including redirect targets, before fetching.
+
+The hot path does not get a general document-reading tool. It only receives bounded attachment context produced by the media pipeline. For current-turn images, Finn auto-loads only a small number of model-prepared image inputs and leaves additional images as file metadata/references; workers can inspect the stored file or connector-provided document URL when a delegated/background task actually needs the contents.
+
+## Creative Generation
+
+When Fal is configured, workers can:
+
+- generate images
+- edit images
+- generate videos
+- animate images into video
+- edit videos
+
+Generated outputs are downloaded, stored locally, and returned with file ids so the hot path can deliver the actual asset back to the user.
+
+When a generated or edited asset is meant for the user, workers should keep it visible in Library. Intermediate analysis files should stay hidden.
+
+## Voice Features
+
+Voice support is conditional:
+
+- Deepgram enables speech-to-text
+- ElevenLabs enables text-to-speech
+
+The two capabilities are independent. With only Deepgram, Finn can transcribe inbound voice/audio and reply in text. With only ElevenLabs, Finn can expose explicit voice replies in the hot-path `send_message` tool. Outbound voice replies are synthesized, converted to `.caf`, stored locally, and sent through Spectrum voice content so iMessage can render them as voice messages.
+
+## Practical Constraint
+
+Media support depends on local storage being configured correctly. Spectrum outbound media sends use local files or buffers, while `PUBLIC_URL` is still used for web and file-route access.
+
+## Next Reads
+
+- [Messaging](/features/messaging)
+- [Configuration](/operations/configuration)
+- [Tools](/reference/tools)

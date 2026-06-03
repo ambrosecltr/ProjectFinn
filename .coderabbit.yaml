@@ -1,0 +1,14 @@
+reviews:
+  path_filters:
+    - "!.coderabbit.yaml"
+    - "!.dockerignore"
+    - "!.env.example"
+    - "!.github/PULL_REQUEST_TEMPLATE/**"
+    - "!AGENTS.md"
+    - "!CONTRIBUTING.md"
+    - "!Dockerfile"
+    - "!README.md"
+    - "!bun.lock"
+    - "!docker-compose.dev.yml"
+    - "!docs/**"
+    - "!packages/*/AGENTS.md"

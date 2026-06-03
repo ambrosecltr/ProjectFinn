@@ -1,0 +1,439 @@
+---
+title: "LLM Runtime Map"
+description: "Every model-calling runtime in Finn, plus which tools each one can use and when."
+---
+
+This page is the code-level map of Finn's LLM runtimes.
+
+It answers three questions:
+
+- which runtime is calling a model
+- whether that runtime can use tools
+- which tools are actually available in that runtime and under what conditions
+
+The source of truth is the runtime code in `packages/agents/src/*`, `packages/tools/src/*`, `packages/toolsets/src/*`, `packages/server/src/user-runtime.ts`, and `packages/core/src/config.ts`.
+
+## Runtime Summary
+
+| Runtime | Main code path | Model call | Talks to the user? | Tools? |
+|---|---|---|---|---|
+| Hot-path turn | `packages/agents/src/hot-path.ts` | `streamText()` | Yes | Yes |
+| General worker | `packages/agents/src/worker.ts` | `generateText()` | No | Yes |
+| Pattern-management worker | `packages/agents/src/worker.ts` | `generateText()` | No | Yes |
+| Pattern worker | `packages/agents/src/worker.ts` | `generateText()` | No | Yes |
+| My Day refresh | `packages/server/src/my-day-refresh-service.ts` | `generateText()` | No | Yes |
+| Personal Intelligence ingestion | `packages/server/src/personal-intelligence-service.ts` | `generateText()` | No | Yes |
+| Worker finalization pass | `packages/agents/src/worker.ts` | `generateText()` | No | `set_status` only |
+| Worker context compaction | `packages/agents/src/worker.ts` | `generateText()` | No | No |
+| Conversation compactor | `packages/agents/src/compactor.ts` | `generateText()` | No | No |
+| Daily handoff summary | `packages/agents/src/conversation-store.ts` | `generateText()` | No | No |
+
+## Models By Process
+
+Finn configures three named model processes in `packages/core/src/config.ts`:
+
+- `hot-path`
+- `worker`
+- `compactor`
+
+The runtime mapping is:
+
+- Hot-path turns use `llmManager.getModel("hot-path")` in `packages/agents/src/hot-path.ts`.
+- General workers, pattern-management workers, and pattern workers use `llmManager.getModel("worker")` in `packages/agents/src/worker-manager.ts`.
+- Worker context checkpoint compaction uses the compactor model inside the worker runtime in `packages/agents/src/worker-manager.ts` and `packages/agents/src/worker.ts`.
+- Conversation compaction uses `llmManager.getModel("compactor")` in `packages/agents/src/compactor.ts`.
+- Daily handoff summary generation is an internal hot-path-adjacent summarization pass in `packages/agents/src/conversation-store.ts`.
+
+## Finn JS workspace Runtime
+
+Finn exposes project toolsets through Finn JS workspace rather than shell commands.
+
+The model receives two native tools:
+
+| Tool | Purpose |
+|---|---|
+| `workspace_search` | Search the currently granted Finn API catalog and retrieve compact TypeScript signatures, descriptions, examples, and grant notes. |
+| `workspace_execute` | Run JavaScript inside a Secure Exec V8 isolate with a typed global `finn` API object. |
+
+`workspace_search` keeps prompt context small. Toolset descriptions are not dumped into every prompt; the model searches for the API surface it needs, then runs code such as `await finn.files.read({ path: "/workspace/files/note.txt" })`.
+
+`workspace_execute` is not a shell. It cannot spawn host processes, install packages, or access the host filesystem directly. Durable workspace access, connector reads, MCP calls, creative generation, Pattern management, and Puter bridge access all go through the granted `finn.<toolset>.<operation>()` APIs. Secure Exec provides the JavaScript runtime isolation; Finn's process runtime grants decide which APIs exist for each LLM process.
+
+`view_image` remains a separate native model tool when a runtime needs actual image pixels. The files API handles metadata, text, extraction, downloads, writes, and patches; image bytes are prepared through the native image path.
+
+## Hot-Path Runtime
+
+The hot path is the only runtime that can directly message the user. Its base toolset is created in `packages/tools/src/hot-path/index.ts`.
+
+Hot-path prompt assembly adds explicit prompt envelopes around user-authored turns, worker/trigger events, runtime metadata, status, and auto memory so only `human_message` blocks count as user input in-model.
+
+### Base Hot-Path Tools
+
+These tools are created by the hot-path factory when the matching runtime dependency is wired:
+
+| Tool | Source | Notes |
+|---|---|---|
+| `send_message` | `packages/tools/src/hot-path/send-message.ts` | Always present. Exposes `voice_message` only when voice reply deps exist. |
+| `send_media` | `packages/tools/src/hot-path/send-message.ts` | Sends a stored file by `fileId`. |
+| `react` | `packages/tools/src/hot-path/react.ts` | Tapback reaction. |
+| `wait` | `packages/tools/src/hot-path/wait.ts` | Explicit no-op. |
+| `display_draft` | `packages/tools/src/hot-path/display-draft.ts` | Show a draft for confirmation. |
+| `search_memory` | `packages/tools/src/hot-path/memory.ts` | Optional; present only when an external memory provider is active. Searches Finn's user memory. |
+| `reflect_memory` | `packages/tools/src/hot-path/memory.ts` | Optional; present only when the selected memory provider supports reflection. |
+| `workspace_search`, `workspace_execute`, `view_image` | `packages/tools/src/code-mode.ts`, `packages/tools/src/view-image.ts`, and the `files` toolset | Optional file context through the grant-scoped `finn.files.*` API. Document extraction is suppressed for the hot path. |
+| `update_user_profile` | `packages/tools/src/hot-path/profile.ts` | Optional silent core profile update tool. |
+| `list_active_patterns` | `packages/tools/src/hot-path/patterns.ts` | Optional read-only Pattern context helper. |
+| Reminder tools | `packages/tools/src/hot-path/patterns.ts` | Optional reminder read/write tools. Writes are user-origin only. |
+| My Day todo tools | `packages/tools/src/hot-path/my-day.ts` | Optional My Day read/write tools. Writes are user-origin only except user-worker completion. |
+| `finish_turn` | `packages/tools/src/hot-path/finish-turn.ts` | Explicitly ends the streamed turn. |
+
+`delegate` is not part of the base hot-path tool factory. It is injected for user, worker-result, and trigger turns in `HotPathAgent.getScopedTools()` when a worker manager exists.
+
+### Hot-Path Active Tools By Turn Source
+
+The hot path does not expose the same active tool list on every turn. `prepareStep()` in `packages/agents/src/hot-path.ts` narrows the active tools by source while keeping delivery tools available across steps.
+
+| Turn source | Active tools | Notes |
+|---|---|---|
+| `user` | delivery, turn-control, `delegate`, optional memory, file context, Pattern context, reminder read/write, My Day read/write, `react`, `update_user_profile` | Full hot-path user surface. |
+| `user` after a delegation with no delivery tool yet | `send_message`, `wait`, `finish_turn` | Guardrail so the user still gets an ack or silence before the turn ends. |
+| `worker` where `originSource === "user"` | delivery, turn-control, `delegate`, optional memory, file context, Pattern context, reminder read, My Day read, `update_my_day_todo` | Keeps the user-worker handoff completion path. |
+| `worker` where `originSource !== "user"` | delivery, turn-control, `delegate`, optional memory, file context, Pattern context, reminder read, My Day read | No direct state writes. |
+| `trigger` | delivery, turn-control, `delegate`, optional memory, file context, Pattern context, reminder read, My Day read | No direct state writes. |
+
+### Hot-Path Availability Rules
+
+- `send_message` exists on every hot-path turn.
+- `send_message.voice_message` exists only when `createHotPathTools()` receives `voice` deps.
+- `voice` deps are only passed from `packages/server/src/user-runtime.ts` when text-to-speech is configured and an ElevenLabs client exists.
+- `delegate` exists for every inbound hot-path source when a `WorkerManager` is configured.
+- `search_memory` exists only when an external memory provider is active and the user runtime passes the provider dependency.
+- File, reminder, My Day, and Pattern context tools are active across hot-path sources when wired; file context uses Finn JS workspace with the `finn.files.*` API.
+- `react`, `update_user_profile`, reminder writes, and most My Day writes are active only for user-origin turns.
+- `update_my_day_todo` is also active for user-origin worker completions so Finn can complete handed-off My Day todos when appropriate.
+- Pattern CRUD tools are not exposed in the live hot-path runtime.
+- Multi-bubble or mixed delivery is allowed across steps when it belongs to the same response.
+- Delivery tool results are outbound receipts, not user-authored messages; `finish_turn` remains the explicit turn terminator.
+
+## Worker Runtime
+
+All worker-style runtimes share one code path in `packages/agents/src/worker.ts`, but they do not all get the same tools.
+
+Every worker always gets:
+
+- `set_status`
+
+`set_status` is injected directly inside `WorkerAgent.run()` in `packages/agents/src/worker.ts`. It is not defined in `@finn/tools`.
+
+All other worker tools come from `createWorkerRuntimeConfig()` in `packages/tools/src/worker/factory.ts`.
+
+### Worker Tool Families
+
+| Tool family | Finn JS workspace API | Main gate |
+|---|---|---|
+| Research | `finn.web.search`, `finn.web.fetch` | Exa integration exists and worker capability flag is enabled |
+| Creative | `finn.creative.image`, `finn.creative.video` | Fal integration exists and worker capability flag is enabled |
+| Files | `finn.files.*` plus native `view_image` for image pixels | `workspace_files` capability is enabled and the process runtime grants file access |
+| MCP | `finn.mcp.servers`, `finn.mcp.search`, `finn.mcp.resources`, `finn.mcp.readResource`, optional `finn.mcp.call` | MCP service exists and `mcp` capability is enabled |
+| Pattern management | `finn.patterns.*` | `patterns` capability is enabled, Pattern runtime exists, and the worker type is explicitly `pattern_management` |
+| Pattern run history | `finn.pattern.runs`, `finn.pattern.run` | Pattern-triggered run with Pattern runtime deps configured |
+| User memory search | native `search_memory` | Optional memory provider exists, `memory` capability is enabled, and user context exists |
+| Pattern memory search | native `search_memory` with `scope: "pattern"` | Optional memory provider exists, `memory` capability is enabled, and the run is Pattern-triggered |
+| Memory reflection | native `reflect_memory` with optional `scope: "pattern"` | Selected memory provider implements reflection, `memory_reflect` capability is enabled, and the matching user/Pattern context exists |
+| Composio | native Composio runtime tools | Composio integration exists, `composio` capability is enabled, and the runtime has eligible toolkits or auth requests are allowed |
+| Puter Personal Intelligence | `finn.puter.imessage.*`, `finn.puter.notes.*` | The Puter connector source is enabled for Personal Intelligence and the paired Mac bridge is active |
+
+Finn JS workspace output can spill oversized results into run-scoped `/artifacts/...` files. Follow-up code should inspect those paths through `finn.files.read`, `finn.files.search`, or `finn.files.extract`.
+
+### General Worker
+
+General workers are the default delegated worker type.
+
+They always get:
+
+- `set_status`
+
+They may also get any combination of:
+
+- Finn JS workspace `web`, `creative`, `files`, and `mcp` APIs
+- native Composio runtime tools
+- native `search_memory` and optional `reflect_memory`
+- native `view_image` when file/image access is granted
+
+General workers never get Pattern CRUD/discovery APIs. Pattern creation and edits are delegated to `worker_type: "pattern_management"`.
+
+### Pattern-Management Worker
+
+Pattern-management workers use the same worker runtime, but `worker_type: "pattern_management"` enables the full Pattern API in `packages/tools/src/worker/factory.ts`.
+
+They always get:
+
+- `set_status`
+
+They may also get:
+
+- Finn JS workspace `patterns` API
+- Finn JS workspace read-only `files` API
+- Finn JS workspace MCP read/discovery APIs
+- Composio connection-management/runtime tools
+- native user-memory search/reflection tools
+
+The Pattern CRUD surface is backed by the Pattern runtime/toolset layer rather than the hot path. The hot path can optionally receive the separate read-only `list_active_patterns` helper for Pattern context.
+
+For scheduled Pattern creation, `finn.patterns.create` accepts structured schedule input. Pattern-management workers should use `kind: "interval"` for relative cadences, `kind: "once"` for one-shot tasks, and `kind: "daily" | "weekly" | "monthly"` for wall-clock recurrences such as weekdays at 9am. Pattern APIs do not accept timezone overrides; schedule values use the user's effective timezone.
+
+`finn.patterns.list` returns five summaries at a time with only Pattern ID, name, and user description. Workers must use `finn.patterns.inspect` by ID for trigger config, schedule, connector scope, notification policy, or prompt details.
+
+### Pattern Worker
+
+Pattern-triggered workers are spawned for saved automations. They always get:
+
+- `set_status`
+
+They never get:
+
+- the Finn JS workspace `patterns` management API
+
+They may get any enabled/configured standard worker tool family:
+
+- Finn JS workspace `web`, `creative`, `files`, and `mcp` APIs
+- Finn JS workspace `pattern` run-history API
+- native `search_memory` and optional `reflect_memory`, with `scope: "pattern"` available for current-Pattern continuity
+- Composio tools
+
+Pattern runs are further narrowed only for external connectors:
+
+- `pattern.connectorScope.mcpServerIds` scopes MCP access to specific servers.
+- `pattern.connectorScope.composio` scopes Composio toolkits, accounts, and optional allowed tools.
+- Provider capabilities control whether memory tools exist, but Pattern workers are not selectively stripped of memory, files, or run-history tools by Pattern records.
+
+## Internal Automation Runtimes
+
+### My Day Refresh
+
+My Day refresh runs in `packages/server/src/my-day-refresh-service.ts` with the worker model.
+
+Available tools:
+
+- scoped read-only Composio connector tools for My Day-enabled connectors
+- `search_memory`
+- Finn JS workspace `finn.files.*` APIs with read-only workspace access for temporary connector output artifacts and local document extraction
+- `update_my_day_summary`
+- `create_my_day_todo`
+- `edit_my_day_todo`
+- `archive_my_day_todo`
+
+It does not receive `set_status`; completion is represented by the refresh service result and the tools' stored mutations.
+
+### Personal Intelligence Ingestion
+
+Personal Intelligence ingestion runs in `packages/server/src/personal-intelligence-service.ts` with the worker model.
+
+Available tools:
+
+- scoped read-only Composio connector tools for Personal Intelligence-enabled connectors
+- Finn JS workspace Puter iMessage and Notes APIs for enabled Personal Intelligence sources when the paired Mac app is actively connected
+- `search_memory`
+- Finn JS workspace `finn.files.*` APIs with read-only workspace access for temporary connector output artifacts and local document extraction
+- `retain_personal_intelligence_item`
+- `finish_personal_intelligence_run`
+
+It does not receive `set_status`; completion is represented by the ingestion service result, retained document IDs, skipped reasons, and checkpoint state.
+
+Puter toolsets are not Composio tools. `packages/server/src/personal-intelligence-service.ts` checks the connector's paired device ID, per-source Personal Intelligence opt-in, and `PuterBridge` active status before starting a Puter run. The toolset executor then uses a runtime `executeCommand` callback to send individual typed operations to Finn Puter over the live bridge. If the Mac app is inactive, the Puter connector job is skipped.
+
+## Tool-Free LLM Runtimes
+
+These runtimes call a model but do not receive tools.
+
+### Worker Finalization Pass
+
+If a worker finishes its main loop without calling `set_status(kind: "outcome")`, Finn runs a second model pass in `packages/agents/src/worker.ts`.
+
+That finalization pass has:
+
+- `toolChoice: "required"`
+- `activeTools: ["set_status"]`
+
+It is a worker-internal guardrail, not a separate user-visible agent type.
+
+### Worker Context Compaction
+
+Inside long worker runs, older transcript slices can be compacted into a checkpoint summary using the compactor model. This happens in `packages/agents/src/worker.ts` with the prompt from `prompts/worker-context-compaction.xml`.
+
+Tools available:
+
+- none
+
+### Conversation Compactor
+
+The conversation compactor runs after hot-path turns when prompt budget thresholds are reached. It uses the prompt in `prompts/compactor.xml` and the compactor model in `packages/agents/src/compactor.ts`.
+
+Tools available:
+
+- none
+
+### Daily Handoff Summary
+
+When a conversation chapter rolls over, Finn generates a handoff summary in `packages/agents/src/conversation-store.ts`.
+
+Tools available:
+
+- none
+
+This path is tagged as a `hot-path` telemetry process because it supports hot-path continuity, but it is not an interactive hot-path turn and does not receive hot-path tools.
+
+## Capability And Dependency Gating
+
+Finn does not expose optional tools based on prompt text alone. Tool exposure is controlled by both config capability flags and runtime dependencies.
+
+### Global Capability Source
+
+`packages/core/src/config.ts` builds the capability map from configured integrations.
+
+Important derived booleans are:
+
+- Exa API key enables the worker Finn JS workspace `web` API.
+- Fal API key enables the worker Finn JS workspace `creative` API.
+- Composio API key enables worker Composio runtime tools.
+- selected memory provider configuration enables worker user/Pattern memory search and asynchronous handled-turn/Pattern outcome storage. `MEMORY_MODE=hybrid|tools` may also expose hot-path `search_memory`, and Hindsight in those modes may expose `reflect_memory`. `MEMORY_MODE=context` hides hot-path memory tools and relies on compact auto-recall injection instead.
+- ElevenLabs API key enables text-to-speech capability.
+- Deepgram plus ElevenLabs together enable full voice round-trip capability.
+
+### Runtime Dependency Source
+
+`packages/server/src/user-runtime.ts` is where those capabilities are turned into actual runtime deps for a specific user.
+
+That file wires:
+
+- hot-path tools
+- worker tools
+- pattern operations
+- user-scoped file storage
+- user-scoped MCP service
+- user-scoped workspace root and process runtime views
+- voice reply deps for the hot path
+- provider-neutral memory deps and async recorders when configured
+
+If a capability is enabled in config but the required dependency is not passed into the runtime, the tool still does not exist.
+
+## Prompt Guidance Versus Actual Tool Availability
+
+The prompts are not the only source of truth.
+
+### Hot-Path Prompt
+
+The hot-path prompt in `prompts/hot-path.xml` describes the hot-path tool model and delegation behavior. Capability-aware prompt additions are assembled in `packages/agents/src/prompt-factory.ts`.
+
+Notable behaviors:
+
+- Voice reply instructions are appended only when `capabilities.media.textToSpeech` is true.
+- Selective memory-search instructions are appended only when `capabilities.tools.hotPath.search_memory` is true.
+- Worker capability families are summarized from `config.capabilities.tools.worker` so the hot path knows when delegation is worth attempting.
+
+### Worker Prompt Appendix
+
+Workers are more strictly aligned with runtime reality.
+
+The base worker prompts in:
+
+- `prompts/worker.xml`
+- `prompts/pattern-management-worker.xml`
+- `prompts/pattern-worker.xml`
+
+are generic. The exact worker tool list and Finn JS workspace API guidance is appended dynamically by `createWorkerRuntimeConfig()` in `packages/tools/src/worker/factory.ts`.
+
+That means worker prompt guidance is per-run and reflects the actual loaded tool families more accurately than the hot-path prompt does.
+
+## Current Mismatches And Footguns
+
+### `capabilities.tools.hotPath.patterns` does not mean the hot path has Pattern CRUD tools
+
+The capability map includes `hotPath.patterns`, but the live hot-path tool factory in `packages/tools/src/hot-path/index.ts` does not expose Pattern CRUD tools.
+
+Pattern creation and management still happen through delegated workers. The hot path can expose read-only Pattern/reminder context helpers, and reminder write tools are limited to simple reminder Patterns on user-origin turns.
+
+### `finn.patterns.edit` preserves Pattern continuity
+
+`finn.patterns.edit` updates an existing Pattern in place by ID while preserving the same Pattern row and `pattern_runs` history.
+
+It can update:
+
+- user-facing copy and worker prompt
+- schedule or one-shot timing
+- Composio trigger metadata
+- connector scope, trigger filters, and notify condition
+- active state
+
+For Composio trigger changes, Finn creates the replacement external trigger, updates the existing Pattern row, then deletes the old trigger when no other Pattern uses it.
+
+## Fast Reference
+
+### Hot Path
+
+| Context | Tools |
+|---|---|
+| All origins | delivery, turn control, `delegate`, file/Pattern/reminder/My Day context, optional memory |
+| User turn only | `react`, `update_user_profile`, reminder writes, My Day writes |
+| User-origin worker result | all-origin tools plus `update_my_day_todo` for handoff completion |
+| Post-delegation user ack step | `send_message`, `wait`, `finish_turn` only |
+
+### Worker Family
+
+| Runtime | Always present | Optional families |
+|---|---|---|
+| General worker | `set_status` | Finn JS workspace web/creative/files/MCP, Composio, user memory |
+| Pattern-management worker | `set_status` | Finn JS workspace patterns/files/MCP, Composio connection setup, user memory |
+| Pattern worker | `set_status` | configured worker families plus Finn JS workspace pattern run history and Pattern-scoped memory; external connectors are scoped by the Pattern record |
+| Finalization pass | `set_status` | none |
+
+### Internal Automation
+
+| Runtime | Tools |
+|---|---|
+| My Day refresh | scoped Composio, `search_memory`, Finn JS workspace read-only `finn.files.*`, My Day internal mutation tools |
+| Personal Intelligence | scoped Composio, Puter/source Finn JS workspace APIs when live, `search_memory`, Finn JS workspace read-only `finn.files.*`, retention and finish tools |
+
+### Internal Summarizers
+
+| Runtime | Tools |
+|---|---|
+| Worker context compaction | none |
+| Conversation compactor | none |
+| Daily handoff summary | none |
+
+## Relevant Code Paths
+
+- `packages/agents/src/hot-path.ts`
+- `packages/agents/src/worker.ts`
+- `packages/agents/src/worker-manager.ts`
+- `packages/agents/src/compactor.ts`
+- `packages/agents/src/conversation-store.ts`
+- `packages/agents/src/prompt-factory.ts`
+- `packages/tools/src/code-mode.ts`
+- `packages/tools/src/view-image.ts`
+- `packages/tools/src/hot-path/index.ts`
+- `packages/tools/src/hot-path/send-message.ts`
+- `packages/tools/src/hot-path/memory.ts`
+- `packages/tools/src/hot-path/patterns.ts`
+- `packages/tools/src/worker/factory.ts`
+- `packages/tools/src/worker/memory.ts`
+- `packages/toolsets/src/code-mode.ts`
+- `packages/toolsets/src/toolsets/files/`
+- `packages/toolsets/src/toolsets/mcp/`
+- `packages/toolsets/src/toolsets/patterns/`
+- `packages/toolsets/src/toolsets/pattern/`
+- `packages/toolsets/src/toolsets/web/`
+- `packages/toolsets/src/toolsets/creative/`
+- `packages/runtime/src/creative.ts`
+- `packages/core/src/tool-categories.ts`
+- `packages/server/src/user-runtime.ts`
+- `packages/server/src/my-day-refresh-service.ts`
+- `packages/server/src/personal-intelligence-service.ts`
+- `packages/core/src/config.ts`
+
+## Next Reads
+
+- [Agents](/concepts/agents)
+- [Tools](/reference/tools)
+- [Data Model](/reference/data-model)

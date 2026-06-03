@@ -1,0 +1,173 @@
+---
+title: "Project Structure"
+description: "Where the important code, prompts, routes, and packages live."
+---
+
+Finn is a Bun workspace monorepo. The repo root is the working project root for development, and the main application is composed from packages under `packages/`.
+
+## Top-Level Layout
+
+```text
+repo-root/
+├── package.json
+├── docs/
+├── docker-compose.yml
+├── Dockerfile
+├── identity/
+├── prompts/
+├── packages/
+├── skills/
+├── mcp.json
+└── .env.example
+```
+
+## The Directories That Matter Most
+
+### `identity/`
+
+File-backed personality and behavior seed content.
+
+- `FINN.xml` defines Finn's voice and behavioral guardrails.
+
+### `prompts/`
+
+Operational instructions for each model-driven process.
+
+- `hot-path.xml`
+- `worker.xml`
+- `pattern-management-worker.xml`
+- `compactor.xml`
+- `pattern-worker.xml`
+
+Treat these as runtime code, not loose notes. Changing them changes behavior.
+
+### `packages/core/`
+
+Shared infrastructure.
+
+- config loading
+- logger creation
+- event bus
+- shared types
+- ids, helpers, tracing
+
+If you want the real source of truth for env vars, start with `packages/core/src/config.ts`.
+
+### `packages/db/`
+
+Drizzle schema and database access.
+
+- `packages/db/src/schema.ts` is the main schema reference.
+
+### `packages/agents/`
+
+LLM runtime implementations.
+
+- hot path
+- worker
+- compactor
+- worker manager
+- status block
+
+### `packages/tools/`
+
+Tool definitions exposed to agents.
+
+- `src/hot-path/` for conversational tools
+- `src/worker/` for worker tools
+
+### `packages/runtime/`
+
+Shared user-scoped and process-scoped runtime service boundaries.
+
+- workspace paths and file access
+- command, MCP, memory, connector, and Pattern service slots
+- narrowed process views so each LLM run receives only the services it is allowed to use
+
+### `packages/toolsets/`
+
+Project-wide internal toolsets with model-facing instructions, schemas, and allowlisted executors.
+
+The first production toolsets are Puter iMessage and Notes, which Personal Intelligence uses through the live paired Mac bridge.
+
+### `packages/puter/`
+
+Finn Puter, the Tauri macOS menu bar app.
+
+- pairs a Mac with a Finn account
+- guides macOS permissions for local sources
+- keeps an outbound WebSocket open for live iMessage and Notes commands
+- executes those commands locally and returns command results to the server
+
+### `packages/server/`
+
+Composition root and HTTP layer.
+
+- `src/index.ts` boots the full runtime
+- `src/routes/` contains web, admin, webhook, file, and public routes
+- `src/event-wiring.ts` connects events to persistence and delivery
+
+### `packages/patterns/`
+
+Pattern storage and execution plumbing.
+
+- pattern definitions
+- pattern run history
+- scheduled and trigger-driven execution
+- trigger/run bookkeeping
+
+### `packages/web/`
+
+The web app used for login, profile editing, connectors, Pattern management, and recent Pattern run inspection.
+
+### `packages/integrations/`
+
+External integrations.
+
+- Exa
+- Fal
+- Composio
+- MCP service
+
+### `packages/messaging/`
+
+Spectrum client, inbound message routing, and outbound sending.
+
+### `packages/media/`
+
+Attachment processing, file storage, voice transcription, and speech synthesis.
+
+## Where To Edit For Common Tasks
+
+| Task | Primary location |
+|---|---|
+| Change Finn's personality | `identity/FINN.xml` |
+| Change hot-path behavior | `prompts/hot-path.xml` |
+| Change worker behavior | `prompts/worker.xml` |
+| Add or change a tool | `packages/tools/src/` |
+| Change an agent implementation | `packages/agents/src/` |
+| Add or change an HTTP route | `packages/server/src/routes/` |
+| Change env vars or defaults | `packages/core/src/config.ts` |
+| Change schema | `packages/db/src/schema.ts` |
+| Change connector behavior | `packages/server/src/routes/web.ts` and `packages/integrations/src/` |
+| Change Puter Mac app behavior | `packages/puter/` |
+| Change Puter live bridge behavior | `packages/server/src/puter-bridge.ts` and `packages/server/src/personal-intelligence-service.ts` |
+| Change project-local toolsets | `packages/toolsets/src/` |
+| Change file or media handling | `packages/media/src/` |
+
+## Mental Model For The Monorepo
+
+The cleanest way to think about Finn is:
+
+1. `core` defines shared contracts.
+2. `db` persists state.
+3. `integrations`, `messaging`, `media`, and `runtime` services talk to external systems and user-scoped resources.
+4. `tools` make those capabilities available to agents.
+5. `agents` do the reasoning.
+6. `server` wires it all together into one runtime.
+
+## Next Reads
+
+- [Architecture](/concepts/architecture)
+- [Agents](/concepts/agents)
+- [Web App](/features/web-app)

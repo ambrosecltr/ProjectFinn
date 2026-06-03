@@ -1,0 +1,41 @@
+services:
+  finn:
+    build: .
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    volumes:
+      - finn-logs:/data/logs
+      - finn-workspaces:/data/workspaces
+      - ./identity:/app/identity
+      - ./prompts:/app/prompts
+      - ./skills:/app/skills
+    environment:
+      DATABASE_URL: postgresql://finn:${POSTGRES_PASSWORD:-finnpass}@postgres:5432/finn
+      WORKER_WORKSPACES_PATH: /data/workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: finn
+      POSTGRES_USER: finn
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finnpass}
+    expose:
+      - "5432"
+    volumes:
+      - finn-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finn -d finn"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  finn-logs:
+  finn-db:
+  finn-workspaces:
+    name: finn-workspaces

@@ -1,0 +1,150 @@
+---
+title: "Agents"
+description: "Hot path, workers, and compactor in Finn's runtime model."
+---
+
+Finn has three LLM-driven process types.
+
+## The Three Agent Types
+
+| Agent | Role | Talks to the user? |
+|---|---|---|
+| Hot path | Handles every inbound turn and decides what Finn says | Yes |
+| Worker | Performs longer or tool-heavy tasks in the background | No |
+| Compactor | Summarizes old history to protect the hot-path context window | No |
+
+## Hot Path
+
+The hot path is Finn's conversational core.
+
+It receives three kinds of inbound messages:
+
+- `user`: a real user message from iMessage
+- `worker`: a background result or failure
+- `trigger`: an external event such as a connector lifecycle event or a Pattern trigger delivery
+
+The hot path is responsible for:
+
+- deciding whether to answer directly or delegate
+- cancelling an active general worker only when the user cancels, corrects, or supersedes that exact delegated task
+- deciding whether an internal event deserves a user-visible message
+- producing natural text, reactions, or media delivery
+- enforcing confirmation behavior for irreversible actions
+
+The hot path now runs on streamed generation. Tool calls can execute during generation, and the turn ends explicitly through the hot-path-only `finish_turn` tool rather than relying on the model to stop at the right moment.
+
+Its trailing prompt context is structured with explicit envelopes so only `human_message` blocks are user-authored. Runtime status, worker results, trigger events, and auto memory stay separate from the user's message.
+
+For Pattern setup confirmations that arrive through a worker result, the hot path should use structured setup fields copied from `finn.patterns.create` rather than reasoning from schedule details. That keeps user-facing next-run copy aligned with the persisted Pattern record and avoids fake times for event-triggered Patterns.
+
+### What the hot path sees each turn
+
+The system prompt is assembled from multiple layers:
+
+- Finn's file-backed identity
+- the user's core profile fields from the database
+- chapter handoff summary and compaction summaries
+- current time
+- user profile context
+- worker status block
+- recent history
+
+The streamed turn loop treats delivery tool results as outbound receipts, not fresh user turns. That lets Finn send multiple bubbles across steps for one response while still ending the turn explicitly with `finish_turn`.
+
+That is why Finn can sound context-aware without every turn loading the full lifetime history.
+
+When the display name is missing, the hot path can add dynamic guidance to learn it naturally and expose a silent `update_user_profile` tool. That tool is limited to explicit missing names and durable home/base location updates; broader user understanding belongs in memory providers.
+
+## Workers
+
+Workers are single-run background executors. They do not maintain a long-lived conversation. A worker exists to finish one delegated task and report a result.
+
+### Worker lifecycle
+
+1. hot path calls `delegate`
+2. `WorkerManager` creates a database record
+3. worker tools are assembled for that run
+4. the worker executes
+5. it reports progress through `set_status(kind: "working")`
+6. it reports completion through `set_status(kind: "outcome")`
+7. the event bus delivers the outcome back to the hot path
+
+### Important worker rules
+
+- workers do not text the user
+- workers do not reuse prior worker sessions
+- workers are visible to the hot path through the status block
+- hot-path cancellation is limited to active general workers and aborts the worker model run before suppressing the lifecycle result
+- if a worker forgets to emit an outcome, Finn runs a finalization pass so completion stays explicit
+- Pattern-management workers that create a Pattern should include structured setup fields in outcome data (`type: pattern_setup`, `patternId`, `patternName`, `triggerType`, `nextRun`) so the hot path can confirm the automation accurately
+- Pattern-management workers should use structured schedule configs: `once` for one-shot tasks, `interval` for relative cadences, and `daily`/`weekly`/`monthly` for wall-clock recurrences
+
+Pattern-triggered workers are a stricter worker subtype:
+
+- they run as `pattern_worker`
+- they receive Pattern-specific context such as trigger payload, notify condition, and recent run history
+- they must emit a notify outcome
+- the scheduler enforces the notify contract and evaluates notify conditions before anything is surfaced to the hot path
+
+### Worker runtime composition
+
+Workers can receive:
+
+- native `search_memory` and optional `reflect_memory`
+- Composio tools scoped to the current user
+- `workspace_search` and `workspace_execute` for Finn JS workspace execution inside Secure Exec
+- `finn.web.*` APIs for research and browsing
+- `finn.creative.*` APIs for image and video generation or edits
+- `finn.files.*` APIs for stored files, workspace files, downloads, structured patching, and local document extraction
+- native `view_image` when a runtime needs actual image pixels
+- `finn.mcp.*` APIs for MCP discovery, resources, and allowed calls
+- `finn.patterns.*` APIs for `pattern_management` workers only
+- `finn.pattern.*` APIs for Pattern run history on `pattern_worker` runs only
+
+The exact tool set is assembled at spawn time, which is why workers can adapt to the current environment and connected toolkits.
+
+When a tool result is too large for normal model history, Finn can replace it with a run-scoped temporary `/artifacts/...` path. Workers should inspect those artifacts through `finn.files.read`, `finn.files.search`, or `finn.files.extract` during the run, then report the extracted facts or persist any user-facing deliverable separately.
+
+Inside Finn JS workspace, the model writes JavaScript against the granted `finn.*` APIs. It is not a shell: no host process spawning, package installation, or direct host filesystem access is available. Durable files live behind `finn.files.*`, run-scoped outputs use `/artifacts/...`, and VM-local scratch remains isolated inside Secure Exec.
+
+## Compactor
+
+The compactor protects the hot path from context blow-up.
+
+It runs after hot-path turns and uses threshold-based behavior:
+
+- warn
+- background compaction
+- aggressive compaction
+- emergency truncation
+
+The compactor works on persisted chapter history in Postgres.
+
+## Telemetry Identity
+
+AI SDK calls from hot path, workers, handoff generation, and compaction carry stable PostHog metadata so traces group by Finn user or system process instead of fragmenting into one anonymous PostHog person per run. The PostHog OpenTelemetry exporter is also filtered to Finn-marked AI traces and their child spans, so unrelated instrumentation does not leak into Finn's AI analytics stream.
+
+## Why This Split Works
+
+This three-part model keeps responsibilities clean:
+
+- hot path optimizes for responsiveness and voice
+- workers optimize for task execution
+- compactor optimizes for context health
+
+That gives Finn better operational behavior than a single prompt loop trying to do everything itself.
+
+## Where To Change Agent Behavior
+
+| Change | Primary files |
+|---|---|
+| Hot-path behavior | `prompts/hot-path.xml`, `packages/agents/src/hot-path.ts` |
+| Worker behavior | `prompts/worker.xml`, `packages/agents/src/worker.ts` |
+| Compaction behavior | `prompts/compactor.xml`, `packages/agents/src/compactor.ts` |
+| Worker orchestration | `packages/agents/src/worker-manager.ts` |
+
+## Next Reads
+
+- [Memory](/concepts/memory)
+- [Tools](/reference/tools)
+- [Messaging](/features/messaging)

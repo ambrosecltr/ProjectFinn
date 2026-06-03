@@ -1,0 +1,207 @@
+---
+title: "Tools"
+description: "What the hot path and workers can do through the runtime tool layer."
+---
+
+Tools are the bridge between model reasoning and actual system behavior.
+
+This page describes where tools live, how they are composed, and where to extend them. For the process-by-process answer to which LLM runtime gets which tools and when, read [LLM Runtime Map](/reference/llm-runtime-map).
+
+## Tool Layers
+
+Finn has three main tool layers:
+
+| Layer | Purpose | Primary factory |
+|---|---|---|
+| Hot path | Real-time user-facing actions | `packages/tools/src/hot-path/index.ts` |
+| Worker | Background task execution | `packages/tools/src/worker/factory.ts` |
+| Project toolsets | Internal automation APIs with model-facing instructions and allowlisted executors | `packages/toolsets/src/` |
+
+The hot path gets a small, highly intentional toolset. Workers get a broader, capability-gated runtime assembled per run.
+
+## Finn JS workspace
+
+Project-local toolsets are exposed through Finn JS workspace.
+
+The LLM receives two native tools:
+
+| Tool | Purpose |
+|---|---|
+| `workspace_search` | Search the currently granted Finn API catalog. |
+| `workspace_execute` | Execute JavaScript in a Secure Exec V8 isolate with the granted global `finn` API. |
+
+The catalog maps each granted toolset to typed APIs such as:
+
+```ts
+await finn.files.read({ path: "/workspace/files/example.md" });
+await finn.web.search({ query: "site:example.com docs", limit: 5 });
+await finn.patterns.inspect({ id: "ptrn_123" });
+```
+
+The model should search first, then execute. Tool descriptions are intentionally loaded on demand instead of being dumped into every prompt.
+
+`workspace_execute` is not a shell replacement. It does not provide host process execution, package installation, or direct host filesystem access. Every durable action goes through a Finn API that is scoped by the current process runtime.
+
+Secure Exec gives Finn an isolated JavaScript runtime. Finn's runtime views decide which APIs exist and whether file access is read-only or write-capable.
+
+`view_image` remains a separate native model tool for loading actual image pixels. The files API handles file metadata, text reads, searches, extraction, downloads, writes, visibility, and patches.
+
+## Hot-Path Tool Layer
+
+The hot-path tool layer is defined under `packages/tools/src/hot-path/`.
+
+| Tool | Purpose |
+|---|---|
+| `send_message` | send one text bubble |
+| `send_media` | send a stored file by `fileId` |
+| `react` | send a tapback |
+| `delegate` | create a worker run from a user, worker-result, or trigger turn when the worker runtime is available |
+| `cancel_worker` | cancel an active general worker when the user cancels, corrects, or supersedes the task |
+| `wait` | explicitly do nothing |
+| `display_draft` | show a draft that needs user review |
+| `search_memory` | search Finn's user memory when an external memory provider is active |
+| `workspace_search`, `workspace_execute`, `view_image` | optional file context through `finn.files.*` and native image loading |
+| `list_active_patterns` | list active Pattern IDs, names, trigger types, and next runs for hot-path Pattern context |
+| `list_reminders`, `inspect_reminder` | read reminder Pattern context |
+| `create_reminder`, `edit_reminder`, `delete_reminder` | create/update/delete simple reminder Patterns on user-origin turns |
+| `list_my_day_todos` | read today's My Day todos |
+| `add_my_day_todo`, `update_my_day_todo`, `delete_my_day_todo` | mutate My Day todos on user-origin turns, with a limited worker-result completion path |
+| `update_user_profile` | silently update explicit core profile basics on user-origin turns |
+| `finish_turn` | explicitly end a streamed hot-path turn |
+
+Important notes:
+
+- `delegate` is injected by `HotPathAgent` for user, worker-result, and trigger turns when a worker manager is configured.
+- `finish_turn` is hot-path-only.
+- `send_message` only exposes `voice_message` when the runtime passes voice reply deps.
+- `search_memory` is search-only and optional. The model cannot use it to store memory or search Pattern continuity records.
+- `MEMORY_MODE=context` hides hot-path memory tools entirely and relies on compact auto-recalled memory in runtime context. `MEMORY_MODE=hybrid` exposes tools and auto-recall, while `MEMORY_MODE=tools` exposes tools without automatic injection.
+- Hot-path prompt assembly keeps user-authored turns, runtime metadata, worker/trigger events, and auto memory in separate prompt envelopes so only `human_message` blocks are treated as user input.
+- File context is exposed through Finn JS workspace with the grant-scoped `files` API. The hot path should keep file use lightweight and delegate content-heavy work.
+- The live hot-path runtime does not expose document extraction, MCP broker tools, or the full Pattern CRUD surface.
+
+For source-specific hot-path tool availability such as `user` vs `worker` vs `trigger` turns, see [LLM Runtime Map](/reference/llm-runtime-map).
+
+## Worker Tool Layer
+
+The worker tool layer is built in two stages:
+
+1. `createAllWorkerTools()` builds the base capability-gated worker toolset.
+2. `createWorkerRuntimeConfig()` adds runtime-only surfaces such as Composio and Finn JS workspace toolsets, then renders the prompt appendix for that exact run.
+
+Workers always get `set_status`, and then receive a run-specific tool set from `config.capabilities.tools.worker` plus whatever dependencies exist for that user/runtime.
+
+### Worker Tool Families
+
+| Tool family | Backing system | Typical surface |
+|---|---|---|
+| research and browsing | Exa | Finn JS workspace `finn.web.search`, `finn.web.fetch` |
+| image and video generation/editing | Fal | Finn JS workspace `finn.creative.image`, `finn.creative.video` |
+| workspace and stored files | user workspace + file store | Finn JS workspace `finn.files.*`; native `view_image` handles bounded model-ready image pixels |
+| connector actions | Composio | native Composio runtime tools |
+| MCP discovery and invocation | MCP service | Finn JS workspace `finn.mcp.*` |
+| Pattern management | Pattern runtime | Finn JS workspace `finn.patterns.*` |
+| Pattern run history | pattern store | Finn JS workspace `finn.pattern.*` |
+| User and Pattern memory | selected memory provider | native `search_memory`, optional `reflect_memory`, with Pattern workers able to use `scope: "pattern"` |
+| Puter Personal Intelligence | paired Mac app | Finn JS workspace `finn.puter.imessage.*` and `finn.puter.notes.*` through live bridge commands |
+
+### Workspace Files And Documents
+
+Workspace file tools are scoped to the current user's workspace and stored-file records.
+
+- `finn.files.read` is for UTF-8 text files under `/workspace/...`, stored `fileId` values, and temporary `/artifacts/...` text artifacts.
+- `finn.files.extract` is for PDFs, DOCX files, spreadsheets, HTML, and common Office documents. It can read a `/workspace/...` path, `/artifacts/...` path, stored `fileId`, or connector-provided/signed URL, but extraction happens locally and URL reads reject private/internal network targets, including redirect targets.
+- native `view_image` prepares oversized model-ready image bytes under `/artifacts` when a run-scoped artifacts mount is available, leaving original workspace or stored-file inputs in place.
+- scanned or flattened PDFs use local OCR when the worker asks for OCR and the runtime has the local binaries installed.
+- `pattern_management` workers get the `files` API in read-only mode. Pattern setup/edit work should operate on Pattern configuration rather than arbitrary document contents.
+
+Large tool outputs may be spilled into run-scoped temporary artifact paths before they are added back to model history. Workers and internal automation can inspect those paths with `finn.files.read`, `finn.files.search`, or `finn.files.extract` during the run, then should carry forward only the extracted facts or durable user-facing files.
+
+## Project Toolsets
+
+`packages/toolsets/` contains project-wide toolsets for internal automation runtimes. A toolset combines:
+
+- model-facing instructions
+- TypeScript input schemas
+- a small allowlisted executor surface
+- a runtime context that provides the real backing services
+
+Finn JS workspace converts those toolsets into a searchable `finn.*` API catalog. Command names are exposed as JavaScript-friendly methods, so a command like `read_resource` becomes `finn.mcp.readResource(...)`.
+
+Puter toolsets use this pattern for live paired Mac commands. Approved Finn LLM processes can use `puter-imessage` and `puter-notes` only when the corresponding Puter sources are enabled and the paired Mac is active. Personal Intelligence only loads those APIs when the source's separate Personal Intelligence opt-in is enabled.
+
+The local-record executor path in Puter toolsets exists for tests only. New Puter behavior should use live paired Mac commands and should check active device status before exposing or executing the toolset.
+
+## Tool Categories
+
+Tool family membership is centralized in `packages/core/src/tool-categories.ts`.
+
+Hot-path policy uses categories such as `hotpath_delivery`, `hotpath_turn_control`, `hotpath_delegate`, `hotpath_memory`, `hotpath_file_context`, `hotpath_pattern_context`, `hotpath_reminder_read`, `hotpath_reminder_write`, `hotpath_my_day_read`, `hotpath_my_day_write`, `hotpath_reactions`, and `hotpath_profile`.
+
+Worker and internal automation families use categories such as `web`, `creative`, `files`, `js_workspace`, `memory_user`, `memory_pattern`, `composio`, `mcp`, `pattern_management`, `pattern_history`, `worker_status`, `automation_memory`, `my_day_internal`, and `personal_intelligence_internal`.
+
+## Pattern Management Tools
+
+Pattern-management tools are exposed through Finn JS workspace as `finn.patterns.*` in the specialized `pattern_management` worker runtime when Pattern capabilities are enabled.
+
+`finn.patterns.create` supports both scheduled and event-triggered Patterns. For scheduled work, prefer structured `schedule` objects:
+
+- `{"kind":"once","localDateTime":"2026-05-15T09:00"}` for one-shot user-local tasks
+- `{"kind":"interval","every":8,"unit":"hours"}` for relative cadences such as every 8 hours
+- `{"kind":"daily","time":"09:00"}` for daily wall-clock schedules
+- `{"kind":"weekly","daysOfWeek":["monday","tuesday","wednesday","thursday","friday"],"time":"09:00"}` for weekday schedules
+- `{"kind":"monthly","dayOfMonth":"last","time":"17:00"}` for monthly schedules
+
+Schedule values are interpreted in the user's current effective timezone. Pattern create/edit tools do not accept timezone overrides; the effective timezone is the user's manual timezone when set, browser-captured timezone when available, or the system default while unset. Use `startDate` or `anchorLocalDateTime` for delayed starts like "starting Friday".
+
+`finn.patterns.list` is paginated and summary-only. It returns five Patterns at a time with only `id`, `name`, and `userDescription`. Use `finn.patterns.inspect` by ID for full trigger, schedule, connector, notify, runtime, and prompt details.
+
+`finn.patterns.edit` preserves the existing Pattern ID and `pattern_runs` history. It can update scheduling, trigger metadata, connector scope, trigger filters, notify condition, active state, and user-facing/worker-facing copy.
+
+Pattern-triggered workers intentionally do not get the `patterns` management API. They receive the normal configured worker runtime surface, including the `files` API, the read-only `pattern` run-history API, and memory tools when those integrations are available.
+
+## Dynamic Runtime Assembly
+
+The worker runtime is intentionally dynamic. On each spawn, Finn can add or omit tool families based on:
+
+- configured integration availability
+- capability flags from `packages/core/src/config.ts`
+- user-scoped runtime deps from `packages/server/src/user-runtime.ts`
+- worker source, such as delegated user work vs saved Pattern runs
+- Pattern connector scope and standard-tool scope
+- kids mode, which disables Composio connection requests
+
+That is why the most precise availability map lives in [LLM Runtime Map](/reference/llm-runtime-map), not in a single fixed table here.
+
+## Guardrails
+
+- workers must not send messages directly
+- `cancel_worker` is hot-path-only and may stop only active general workers that the user cancelled, corrected, or superseded
+- hot path must confirm irreversible actions
+- creative results should return file ids when possible
+- user-facing files should be visible in Library; disposable Secure Exec scratch stays isolated from durable user files, and returned tool-output artifacts are `/artifacts/...`
+- workers should use `workspace_search` before using unfamiliar `finn.*` APIs
+- workers should use native `view_image` when they need actual image pixels, `finn.files.extract` for formatted or binary documents, and `finn.files.patch` for structured file edits
+- MCP tools are brokered through the granted MCP API, not dumped raw into the model registry
+- memory tools are search-only; no runtime exposes model-controlled add, edit, or delete memory tools
+
+## Where The Main Tool Code Lives
+
+| Need | Primary location |
+|---|---|
+| New hot-path tool | `packages/tools/src/hot-path/` |
+| New Finn JS workspace toolset | `packages/toolsets/src/toolsets/` |
+| Finn JS workspace catalog generation | `packages/toolsets/src/code-mode.ts` |
+| Secure Exec Finn JS workspace tools | `packages/tools/src/code-mode.ts` |
+| Worker runtime-only helper | `packages/tools/src/worker/factory.ts` |
+| Hot-path source-specific tool behavior | `packages/agents/src/hot-path.ts` |
+| Worker runtime assembly and scoping | `packages/tools/src/worker/factory.ts` |
+| User-scoped dependency wiring | `packages/server/src/user-runtime.ts` |
+| Capability source of truth | `packages/core/src/config.ts` |
+
+## Next Reads
+
+- [LLM Runtime Map](/reference/llm-runtime-map)
+- [Agents](/concepts/agents)
+- [Messaging](/features/messaging)
+- [Connectors and Patterns](/features/connectors-and-patterns)

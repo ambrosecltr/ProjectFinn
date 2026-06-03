@@ -1,0 +1,94 @@
+---
+title: "Docs Site"
+description: "How the Mintlify documentation in this repo is organized and previewed."
+---
+
+This repo now includes a Mintlify docs site so documentation can be edited, previewed, and validated like the rest of the codebase.
+
+## What Was Added
+
+- `docs/docs.json` for Mintlify configuration and navigation.
+- A page-based MDX structure split into guide and reference sections.
+- Package scripts for local preview, validation, and broken-link checks.
+
+If you are looking for the actual publish steps, use [Publish to Mintlify](/guides/publish-to-mintlify).
+
+## Commands
+
+Run these from the repo root:
+
+```bash
+bun run docs:dev
+bun run docs:validate
+bun run docs:broken-links
+```
+
+## File Layout
+
+```text
+docs/
+├── docs.json
+├── index.mdx
+├── guides/
+├── concepts/
+├── features/
+├── operations/
+└── reference/
+```
+
+## How To Preview Locally
+
+```bash
+bun run docs:dev
+```
+
+Mintlify serves a local preview so you can verify navigation, formatting, and internal links.
+
+## How To Validate Before Shipping
+
+```bash
+bun run docs:validate
+```
+
+Use broken-link checks as a second pass:
+
+```bash
+bun run docs:broken-links
+```
+
+## Writing Standards For This Repo
+
+The docs pass in this repo is intentionally opinionated. New pages should aim to be:
+
+- accurate to the codebase, not to older assumptions
+- task-oriented before being exhaustive
+- clear about what is required, optional, legacy, or conditional
+- written in plain engineering language instead of placeholder AI phrasing
+- structured so a new contributor can find the right file quickly
+
+## Source Of Truth Rules
+
+When docs and code disagree, prefer the code and then fix the docs.
+
+In practice, that means checking:
+
+- `packages/core/src/config.ts` for env vars and defaults
+- `packages/server/src/routes/` for HTTP behavior
+- `packages/db/src/schema.ts` for persistence and relationships
+- `packages/server/src/index.ts` for how the runtime is actually composed
+
+## Good Future Additions
+
+Useful next improvements would be:
+
+- endpoint examples for the web API
+- screenshots of the web app
+- a contributor page for adding new tools or integrations
+- a troubleshooting page keyed to common startup failures
+
+## Next Reads
+
+- [Quickstart](/guides/quickstart)
+- [Configuration](/operations/configuration)
+- [Web API](/reference/web-api)
+- [Publish to Mintlify](/guides/publish-to-mintlify)

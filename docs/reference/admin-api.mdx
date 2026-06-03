@@ -1,0 +1,99 @@
+---
+title: "Admin API"
+description: "Health, status, pattern, worker, and event endpoints for operators."
+---
+
+The admin API lives under `/admin/*` and is intended for runtime inspection and operations.
+
+## Authentication
+
+If `ADMIN_BEARER_TOKEN` is set, admin routes require:
+
+```text
+Authorization: Bearer <token>
+```
+
+If it is not set, the admin API is open.
+
+## Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/admin/` | `GET` | health overview |
+| `/admin/status` | `GET` | detailed runtime snapshot |
+| `/admin/workers` | `GET` | active workers |
+| `/admin/patterns` | `GET` | active patterns |
+| `/admin/events` | `GET` | recent event bus events |
+| `/admin/users/:id/refresh-intelligence` | `POST` | manually run Personal Intelligence ingestion and My Day refresh for a user |
+| `/admin/patterns/:id/toggle` | `POST` | toggle a pattern |
+
+## `GET /admin/`
+
+Returns a high-level health object with:
+
+- database status
+- active worker count
+- active pattern count
+- Graphile scheduler status plus automation status for My Day and Personal Intelligence
+- connected MCP server list
+
+## `GET /admin/status`
+
+Returns an aggregate runtime snapshot, including:
+
+- process uptime
+- process memory stats
+- configured model selections
+- derived `config.runtimeGating` enabled/disabled integration, media, and exposed tool-family lists
+- turn limits and worker limits
+- active worker count
+- active pattern count
+- automation service status, including enabled/running flags, intervals, and last errors
+- connected MCP server count
+
+This endpoint intentionally does not return user-owned worker records, Pattern records, MCP inventories, or task/prompt content.
+
+## `GET /admin/workers`
+
+Returns active workers only.
+
+Useful when you need to understand whether Finn is stuck on a long-running background action.
+
+## `GET /admin/patterns`
+
+Returns active pattern records.
+
+Useful when you need to confirm whether a pattern is still enabled in the runtime view.
+
+## `GET /admin/events`
+
+Returns the most recent persisted events, newest first.
+
+This is one of the easiest ways to understand recent worker completions, failures, trigger deliveries, and other system behavior without tailing logs.
+
+## `POST /admin/users/:id/refresh-intelligence`
+
+Manually runs the user's Personal Intelligence ingestion when configured, then runs a My Day refresh with reason `manual` when configured. Personal Intelligence fans out across the user's enabled connector/account scopes and each run only receives that connector's tools. The response contains `{ userId, personalIntelligence, myDay }`; either service result can be `null` when that automation is unavailable.
+
+Use this endpoint deliberately because it can start long-running connector and memory-provider work. It is not the same as opening the web My Day sheet, which never starts an LLM refresh by itself.
+
+## `POST /admin/patterns/:id/toggle`
+
+Toggles a pattern active or inactive and returns the resulting state.
+
+## Example
+
+```bash
+curl http://localhost:3000/admin/status \
+  -H 'Authorization: Bearer your-token'
+```
+
+## Related Public Health Endpoint
+
+`GET /health` exists outside the admin namespace and is intended for health checks and container orchestration.
+
+## Next Reads
+
+- [Deployment](/operations/deployment)
+- [Web API](/reference/web-api)
+- [Data Model](/reference/data-model)

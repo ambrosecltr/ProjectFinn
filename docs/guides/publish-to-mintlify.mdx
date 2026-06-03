@@ -1,0 +1,122 @@
+---
+title: "Publish To Mintlify"
+description: "How to connect this repo to Mintlify and deploy the docs site from the docs subdirectory."
+---
+
+This repo is already structured to work with Mintlify. The docs project lives in the `docs/` subdirectory and Mintlify should be pointed at that directory.
+
+## What Mintlify Needs From This Repo
+
+Mintlify should build from:
+
+```text
+docs/
+```
+
+The config file Mintlify will look for is:
+
+```text
+docs/docs.json
+```
+
+## Recommended Setup Path
+
+### 1. Push the docs changes to GitHub
+
+Mintlify deploys from Git, so the first requirement is that this repo or a docs-only mirror lives in GitHub.
+
+### 2. Create or open your Mintlify project
+
+Go to `https://mintlify.com/start` and create a docs project, or use the Mintlify dashboard if you already have one.
+
+### 3. Connect your GitHub repository
+
+In Mintlify:
+
+1. choose GitHub as the source
+2. select this repository
+3. select the branch you want Mintlify to deploy from
+4. set the docs subdirectory to `docs`
+
+That last step is important for this repo. The docs do not live at the repository root.
+
+### 4. Install the Mintlify GitHub App
+
+If the repository is your own GitHub repo, install the Mintlify GitHub App so pushes trigger deployments and PR previews.
+
+The relevant Mintlify Git settings page is:
+
+```text
+Dashboard -> Settings -> Deployment -> Git Settings
+```
+
+## Exact Values To Use
+
+When Mintlify asks for the docs location, use:
+
+| Setting | Value |
+|---|---|
+| Repository | this repo |
+| Branch | your preferred deploy branch, usually `main` |
+| Docs subdirectory | `docs` |
+| Config file | `docs/docs.json` |
+
+## Local Checks Before You Push
+
+From the repo root:
+
+```bash
+bun run docs:validate
+```
+
+If your machine is on Node 25+, Mintlify CLI may refuse to run directly. In that case, use an LTS runtime such as Node 20 for validation.
+
+## If Mintlify Says It Cannot Find Your Docs
+
+The usual cause is that the docs subdirectory was not set.
+
+Check the Git settings in Mintlify and make sure:
+
+- repo is correct
+- branch is correct
+- subdirectory is exactly `docs`
+
+## If Deployments Do Not Trigger
+
+Check these in order:
+
+1. the Mintlify GitHub App is installed on the correct repository
+2. Mintlify is watching the same branch you are pushing to
+3. the subdirectory is set to `docs`
+4. `docs/docs.json` exists on that branch
+
+## Suggested Publish Workflow
+
+For this repo, a clean workflow is:
+
+1. edit docs locally
+2. run `bun run docs:validate`
+3. open a PR
+4. review the Mintlify preview
+5. merge to `main`
+
+## Good Next Improvements For Publishing
+
+Once the project is live on Mintlify, the next useful polish would be:
+
+- replace placeholder GitHub links in `docs/docs.json`
+- add a custom domain
+- add screenshots for the web app and patterns
+- add richer visuals or diagrams to the landing page
+
+## What You Need To Do Now
+
+To get this live on Mintlify:
+
+1. push this branch to GitHub
+2. create or open the Mintlify project
+3. connect the repo and branch
+4. set the docs subdirectory to `docs`
+5. install the GitHub App
+
+After that, Mintlify should build the docs site from `docs/docs.json` automatically.
