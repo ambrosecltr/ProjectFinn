@@ -486,6 +486,10 @@ function isHindsightConfigured(integrations: NonNullable<z.infer<typeof configSc
   return Boolean(integrations.hindsight?.baseUrl);
 }
 
+function shouldForceToolChoiceByDefault(models: Record<"default" | ProcessConfigKey, ModelConfig>): boolean {
+  return !processKeys.some((key) => models[key].provider === "openai-compatible");
+}
+
 export function resolveMemoryProvider(input: {
   requested?: string;
   integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>;
@@ -682,7 +686,7 @@ export function loadConfig(): AppConfig {
     models,
 
     llm: {
-      forceToolChoice: envBool("LLM_FORCE_TOOL_CHOICE", true),
+      forceToolChoice: envBool("LLM_FORCE_TOOL_CHOICE", shouldForceToolChoiceByDefault(models)),
     },
 
     maxTurns: {

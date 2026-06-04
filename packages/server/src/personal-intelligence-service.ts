@@ -1246,7 +1246,7 @@ export class PersonalIntelligenceService {
           [finishPersonalIntelligenceRunToolName]: finishRunTool,
         },
         activeTools: [finishPersonalIntelligenceRunToolName],
-        toolChoice: "required",
+        ...(this.deps.config.llm.forceToolChoice ? { toolChoice: "required" as const } : {}),
         ...this.deps.llmManager.getRequestOptions("worker", input.runId),
         stopWhen: finishPersonalIntelligenceRunStopCondition,
         experimental_telemetry: createFinnTelemetry({

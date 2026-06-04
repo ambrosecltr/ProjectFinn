@@ -74,6 +74,7 @@ Every runtime process resolves from the default model/provider/key unless a proc
 | `DEFAULT_MAX_CONTEXT_TOKENS` | `128000` |
 | `DEFAULT_MAX_OUTPUT_TOKENS` | unset |
 | `DEFAULT_REASONING_EFFORT` | unset; DeepSeek only |
+| `LLM_FORCE_TOOL_CHOICE` | `true`, or `false` when any process uses `openai-compatible` |
 | `HOT_PATH_MODEL` | `DEFAULT_MODEL` |
 | `HOT_PATH_PROVIDER` | `DEFAULT_PROVIDER` |
 | `HOT_PATH_API_KEY` | `DEFAULT_API_KEY` |
@@ -106,7 +107,7 @@ Supported providers:
 
 The provider and model string need to agree. If they do not, startup validation should fail.
 
-OpenAI-compatible model strings use the `openai-compatible:` prefix, for example `openai-compatible:local-chat-model`. Base URLs must include the provider's OpenAI-compatible API prefix, commonly `/v1`. API keys are optional only when the endpoint accepts unauthenticated requests.
+OpenAI-compatible model strings use the `openai-compatible:` prefix, for example `openai-compatible:local-chat-model`. Base URLs must include the provider's OpenAI-compatible API prefix, commonly `/v1`. API keys are optional only when the endpoint accepts unauthenticated requests. Finn disables forced tool choice by default for OpenAI-compatible endpoints because many gateways accept optional tool calls but reject `tool_choice: "required"` routing.
 
 Legacy provider-key envs such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `FIREWORKS_API_KEY` are no longer read by the runtime. Put the active key in `DEFAULT_API_KEY`, or use the process-specific `*_API_KEY` override when a process uses a different provider/account.
 

@@ -321,6 +321,7 @@ describe("loadConfig LLM models", () => {
     expect(config.models.compactor.baseUrl).toBe("http://localhost:1234/v1");
     expect(config.apiKeys.default).toBeUndefined();
     expect(config.capabilities.llm.defaultProvider).toBe("openai-compatible");
+    expect(config.llm.forceToolChoice).toBe(false);
   });
 
   it("allows process-specific OpenAI-compatible base URL overrides", () => {
@@ -340,6 +341,7 @@ describe("loadConfig LLM models", () => {
       maxContextTokens: 128_000,
     });
     expect(config.models.compactor.baseUrl).toBeUndefined();
+    expect(config.llm.forceToolChoice).toBe(false);
   });
 
   it("loads DeepSeek as a model provider", () => {
@@ -411,6 +413,28 @@ describe("loadConfig LLM models", () => {
     const config = loadConfig();
 
     expect(config.llm.forceToolChoice).toBe(false);
+  });
+
+  it("keeps forced tool choice enabled by default for native providers", () => {
+    setRequiredEnv();
+
+    const config = loadConfig();
+
+    expect(config.llm.forceToolChoice).toBe(true);
+  });
+
+  it("allows forced tool choice to be explicitly enabled for OpenAI-compatible providers", () => {
+    setRequiredEnv({
+      DEFAULT_PROVIDER: "openai-compatible",
+      DEFAULT_MODEL: "openai-compatible:local-chat-model",
+      DEFAULT_API_KEY: undefined,
+      DEFAULT_BASE_URL: "http://localhost:1234/v1",
+      LLM_FORCE_TOOL_CHOICE: "true",
+    });
+
+    const config = loadConfig();
+
+    expect(config.llm.forceToolChoice).toBe(true);
   });
 
   it("allows process-specific context and output limit overrides", () => {
