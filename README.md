@@ -131,7 +131,7 @@ bun run web:dev
 bun run web:build
 ```
 
-Small design footnote: Finn's web app is heavily inspired by [Poke by Interaction Company](https://poke.computer). Massive shoutout to Interaction Company. Please don't sue us.
+Small design footnote: Finn's web app is [heavily inspired by Poke by The Interaction Company](https://poke.com). Massive shoutout to The Interaction Company. Please don't sue us.
 
 ## Puter
 
