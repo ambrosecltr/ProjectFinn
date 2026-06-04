@@ -48,7 +48,7 @@ const contextConfigSchema = z.object({
 const llmProviderSchema = z.enum(["anthropic", "openai", "fireworks", "deepseek", "openai-compatible"]);
 const llmReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 const telemetryProviderSchema = z.enum(["none", "posthog"]);
-const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight"]);
+const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight", "honcho"]);
 const memoryModeSchema = z.enum(["hybrid", "context", "tools"]);
 const memoryConfigSchema = z.object({
   provider: memoryProviderSchema,
@@ -223,6 +223,7 @@ const configSchema = z.object({
       deepgram: z.boolean(),
       elevenlabs: z.boolean(),
       hindsight: z.boolean(),
+      honcho: z.boolean(),
       supermemory: z.boolean(),
     }),
     media: z.object({
@@ -330,6 +331,14 @@ const configSchema = z.object({
           baseUrl: z.string().url().optional(),
         })
         .optional(),
+      honcho: z
+        .object({
+          apiKey: z.string().optional(),
+          baseUrl: z.string().url().optional(),
+          workspacePrefix: z.string().optional(),
+          timeoutMs: z.number().int().positive().optional(),
+        })
+        .optional(),
     })
     .optional(),
 
@@ -374,6 +383,14 @@ const configSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["memory", "provider"],
       message: "MEMORY_PROVIDER=hindsight requires HINDSIGHT_BASE_URL.",
+    });
+  }
+
+  if (config.memory.provider === "honcho" && !isHonchoConfigured(config.integrations ?? {})) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["memory", "provider"],
+      message: "MEMORY_PROVIDER=honcho requires HONCHO_API_KEY or HONCHO_BASE_URL.",
     });
   }
 });
@@ -486,6 +503,10 @@ function isHindsightConfigured(integrations: NonNullable<z.infer<typeof configSc
   return Boolean(integrations.hindsight?.baseUrl);
 }
 
+function isHonchoConfigured(integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>): boolean {
+  return Boolean(integrations.honcho?.apiKey || integrations.honcho?.baseUrl);
+}
+
 function shouldForceToolChoiceByDefault(models: Record<"default" | ProcessConfigKey, ModelConfig>): boolean {
   return !processKeys.some((key) => models[key].provider === "openai-compatible");
 }
@@ -501,6 +522,7 @@ export function resolveMemoryProvider(input: {
   const configuredProviders: MemoryProvider[] = [
     ...(input.integrations.supermemory?.apiKey ? ["supermemory" as const] : []),
     ...(isHindsightConfigured(input.integrations) ? ["hindsight" as const] : []),
+    ...(isHonchoConfigured(input.integrations) ? ["honcho" as const] : []),
   ];
 
   if (configuredProviders.length > 1) {
@@ -523,11 +545,15 @@ export function buildCapabilities(raw: {
   const hasElevenlabs = Boolean(raw.integrations.elevenlabs?.apiKey);
   const hasSupermemory = Boolean(raw.integrations.supermemory?.apiKey);
   const hasHindsight = isHindsightConfigured(raw.integrations);
+  const hasHoncho = isHonchoConfigured(raw.integrations);
   const memoryProvider = raw.memoryProvider ?? resolveMemoryProvider({ integrations: raw.integrations });
   const memoryMode = raw.memoryMode ?? "tools";
-  const hasMemory = (memoryProvider === "supermemory" && hasSupermemory) || (memoryProvider === "hindsight" && hasHindsight);
+  const hasMemory = (memoryProvider === "supermemory" && hasSupermemory)
+    || (memoryProvider === "hindsight" && hasHindsight)
+    || (memoryProvider === "honcho" && hasHoncho);
   const hasHotPathMemoryTools = hasMemory && memoryMode !== "context";
-  const hasMemoryReflect = memoryProvider === "hindsight" && hasHindsight;
+  const hasMemoryReflect = (memoryProvider === "hindsight" && hasHindsight)
+    || (memoryProvider === "honcho" && hasHoncho);
 
   return {
     boot: {
@@ -553,6 +579,7 @@ export function buildCapabilities(raw: {
       deepgram: hasDeepgram,
       elevenlabs: hasElevenlabs,
       hindsight: hasHindsight,
+      honcho: hasHoncho,
       supermemory: hasSupermemory,
     },
     media: {
@@ -657,6 +684,12 @@ export function loadConfig(): AppConfig {
     hindsight: {
       apiKey: optionalEnv("HINDSIGHT_API_KEY"),
       baseUrl: optionalEnv("HINDSIGHT_BASE_URL"),
+    },
+    honcho: {
+      apiKey: optionalEnv("HONCHO_API_KEY"),
+      baseUrl: optionalEnv("HONCHO_BASE_URL"),
+      workspacePrefix: optionalEnv("HONCHO_WORKSPACE_PREFIX"),
+      timeoutMs: optionalEnv("HONCHO_TIMEOUT_MS") ? envInt("HONCHO_TIMEOUT_MS") : undefined,
     },
   };
   const memoryProvider = resolveMemoryProvider({

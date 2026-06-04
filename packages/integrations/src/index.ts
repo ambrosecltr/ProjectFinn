@@ -54,6 +54,15 @@ export type {
   HindsightSearchResponse,
   HindsightSearchResult,
 } from "./hindsight.js";
+export { HonchoClient, buildHonchoFilters } from "./honcho.js";
+export type {
+  HonchoAddDocumentInput,
+  HonchoClientOptions,
+  HonchoMetadata,
+  HonchoSearchInput,
+  HonchoSearchResponse,
+  HonchoSearchResult,
+} from "./honcho.js";
 export {
   MemoryRecorder,
   buildActivityFeedMemoryDocument,

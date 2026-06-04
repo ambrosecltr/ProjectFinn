@@ -57,7 +57,7 @@ const patternSearchInputSchema = userSearchInputSchema.extend({
 
 const userReflectInputSchema = z.object({
   question: z.string().trim().min(1).describe("Focused question for Finn's memory layer to answer from user memory."),
-  budget: z.enum(["low", "mid", "high"]).optional().describe("How deeply Finn's memory layer should explore memory. Defaults to mid."),
+  budget: z.enum(["low", "mid", "high"]).optional().describe("Work budget for memory reasoning. Use low for simple/specific facts, mid for synthesis across a few related memories, and high only for broad, ambiguous, sensitive, or high-consequence questions. Defaults to mid."),
 });
 
 const patternReflectInputSchema = userReflectInputSchema.extend({
@@ -181,8 +181,8 @@ function createWorkerReflectMemoryTool(deps: {
   const hasPatternScope = Boolean(deps.patternId);
   return tool({
     description: hasPatternScope
-      ? "Ask Finn's memory layer to synthesize an answer. User scope reflects over user memory; Pattern scope reflects over previous terminal outcomes for the current Pattern only."
-      : "Ask Finn's memory layer to synthesize an answer from user memory. Use for higher-level questions about user patterns, preferences, relationship context, prior Finn/user history, or what Finn should understand about the user; use search_memory when raw matching facts are enough.",
+      ? "Ask Finn's memory layer to synthesize an answer. User scope reflects over user memory; Pattern scope reflects over previous terminal outcomes for the current Pattern only. Budget is a work budget, not an answer-quality slider: low for simple/specific facts, mid for synthesis across a few related memories, high for broad, ambiguous, sensitive, or high-consequence synthesis."
+      : "Ask Finn's memory layer to synthesize an answer from user memory. Use for higher-level questions about user patterns, preferences, relationship context, prior Finn/user history, or what Finn should understand about the user; use search_memory when raw matching facts are enough. Budget is a work budget, not an answer-quality slider: low for simple/specific facts, mid for synthesis across a few related memories, high for broad, ambiguous, sensitive, or high-consequence synthesis.",
     inputSchema: hasPatternScope ? patternReflectInputSchema : userReflectInputSchema,
     execute: async ({ question, budget, scope }: { question: string; budget?: MemoryReflectBudget; scope?: WorkerMemoryScope }) => {
       const resolvedScope = hasPatternScope ? scope ?? "user" : "user";

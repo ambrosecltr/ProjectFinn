@@ -70,10 +70,10 @@ export function createHotPathReflectMemoryTool(deps: {
   memory: MemoryRuntimeService & Required<Pick<MemoryRuntimeService, "reflectMemory">>;
 }) {
   return tool({
-    description: "Ask Finn's memory layer to synthesize an answer from user memory. Use for higher-level questions about patterns, preferences, relationship context, history, or what Finn should understand about the user; use search_memory when raw matching facts are enough.",
+    description: "Ask Finn's memory layer to synthesize an answer from user memory. Use for higher-level questions about patterns, preferences, relationship context, history, or what Finn should understand about the user; use search_memory when raw matching facts are enough. Budget is a work budget, not an answer-quality slider: low for simple/specific facts, mid for synthesis across a few related memories, high for broad, ambiguous, sensitive, or high-consequence synthesis.",
     inputSchema: z.object({
       question: z.string().trim().min(1).describe("Focused question for Finn's memory layer to answer from user memory."),
-      budget: z.enum(["low", "mid", "high"]).optional().describe("How deeply Finn's memory layer should explore memory. Defaults to mid."),
+      budget: z.enum(["low", "mid", "high"]).optional().describe("Work budget for memory reasoning. Use low for simple/specific facts, mid for synthesis across a few related memories, and high only for broad, ambiguous, sensitive, or high-consequence questions. Defaults to mid."),
     }),
     execute: async ({ question, budget }: { question: string; budget?: MemoryReflectBudget }) => {
       const response = await deps.memory.reflectMemory({

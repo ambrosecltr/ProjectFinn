@@ -94,6 +94,9 @@ export const puterImessageManifest: ToolsetManifest = {
       examples: [
         { purpose: "Legacy broad chat list", code: "await finn.puter.imessage.listChats({ limit: 25 })" },
       ],
+      outputGuidance: [
+        "Legacy alias output matches chats. Prefer returned chatId/threadId values with finn.puter.imessage.history for full context.",
+      ],
     },
     {
       name: "search_messages",
@@ -105,6 +108,9 @@ export const puterImessageManifest: ToolsetManifest = {
       examples: [
         { purpose: "Legacy message search", code: "await finn.puter.imessage.searchMessages({ query: \"Project Atlas\", limit: 25 })" },
       ],
+      outputGuidance: [
+        "Legacy alias output matches search. Use returned chat/thread IDs with history before making durable claims.",
+      ],
     },
     {
       name: "read_thread",
@@ -115,6 +121,9 @@ export const puterImessageManifest: ToolsetManifest = {
       ],
       examples: [
         { purpose: "Legacy thread read", code: "await finn.puter.imessage.readThread({ threadId: \"thread_project\", limit: 50 })" },
+      ],
+      outputGuidance: [
+        "Legacy alias output contains thread messages and pagination. Prefer history with threadId in new code.",
       ],
     },
   ],

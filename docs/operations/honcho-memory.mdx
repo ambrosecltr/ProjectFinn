@@ -1,0 +1,67 @@
+---
+title: "Honcho Memory Operations"
+description: "How Finn uses Honcho as a peer-centric memory provider."
+---
+
+Finn can use Honcho as the selected external memory provider with `MEMORY_PROVIDER=honcho`.
+
+## Configuration
+
+| Variable | Purpose |
+|---|---|
+| `MEMORY_PROVIDER=honcho` | selects Honcho as Finn's external memory provider |
+| `HONCHO_API_KEY` | API key for managed Honcho |
+| `HONCHO_BASE_URL` | optional base URL for self-hosted Honcho |
+| `HONCHO_WORKSPACE_PREFIX` | optional prefix for Finn-created workspace IDs; defaults to `finn` |
+| `HONCHO_TIMEOUT_MS` | optional SDK request timeout; defaults to `30000` |
+
+Managed Honcho normally needs `HONCHO_API_KEY`. Self-hosted Honcho can be configured with `HONCHO_BASE_URL`, with or without an API key depending on that deployment. Finn caps Honcho SDK requests at 30 seconds by default so provider calls do not inherit the SDK's 60-second default.
+
+## Runtime Model
+
+Finn creates one Honcho workspace per Finn user runtime. Inside that workspace:
+
+- `user` is the stable user peer
+- `finn` is the stable assistant peer
+- Pattern outcomes use isolated Pattern peers
+- operational activity uses an operational peer instead of the user peer
+
+Finn configures sessions so the `finn` peer observes the `user` peer. This is what lets Honcho build Finn's representation of the user over time without treating Finn's own assistant messages as user facts.
+
+## Context And Profile
+
+Automatic hot-path memory context uses Finn's representation of the user peer, not session-only context. The adapter calls Honcho peer context with an explicit target peer, equivalent to:
+
+```ts
+finnPeer.context({ target: "user", searchQuery })
+```
+
+The profile envelope uses the same cross-session target relationship and includes Honcho's peer card plus a broad representation. Finn caches provider profile context for 10 minutes at the memory runtime layer.
+
+Avoid using `session.context()` for provider-wide user memory unless `peerTarget` and `peerPerspective` are both set. Without a peer target, Honcho session context is scoped to that session's summary and recent messages.
+
+## Search And Reflection
+
+`search_memory` uses Honcho message search and returns concrete message snippets with sanitized metadata.
+
+`reflect_memory` uses Honcho `peer.chat` from Finn's perspective over the target peer:
+
+```ts
+finnPeer.chat(question, { target: "user", reasoningLevel })
+```
+
+This path can invoke Honcho's reasoning model, so it is exposed only as an explicit LLM tool. Do not use it for every turn. Tool budget means work budget:
+
+- `low`: simple, specific facts likely answered by one or two memories
+- `mid`: synthesis across a few related memories
+- `high`: broad, ambiguous, sensitive, or high-consequence synthesis
+
+## Backfill
+
+Honcho participates in the provider-neutral backfill script:
+
+```bash
+bun run memory:backfill --provider honcho --kind all
+```
+
+The backfill is dry-run by default. Add `--execute` to write documents.

@@ -20,6 +20,9 @@ export function createSkillsManifest(options: SkillsManifestOptions): ToolsetMan
       description: "List Finn's installed repo-local worker skills.",
       effects: ["read"],
       inputSchema: skillsListInputSchema,
+      argumentGuidance: [
+        "This API takes an empty input object.",
+      ],
       examples: [
         { purpose: "List installed skills", code: "await finn.skills.list({})" },
       ],

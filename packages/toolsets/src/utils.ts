@@ -1,5 +1,5 @@
+import { formatUnknownError } from "@finn/core";
 import type { PuterToolsetRecord } from "./types.js";
-import { z } from "zod";
 
 export function clampLimit(value: number | undefined, fallback: number, max: number): number {
   if (!value || !Number.isFinite(value)) {
@@ -209,24 +209,7 @@ export function truncate(value: string, maxLength: number): string {
 }
 
 export function formatToolsetError(error: unknown): string {
-  if (error instanceof z.ZodError) {
-    const issues = error.issues.map((issue) => {
-      const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
-      return `${path}: ${issue.message}`;
-    });
-    return `Validation failed: ${issues.join("; ")}`;
-  }
-  if (error instanceof Error) {
-    return error.message || error.name;
-  }
-  if (typeof error === "object" && error !== null) {
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
-  }
-  return String(error);
+  return formatUnknownError(error, { zodPrefix: "Validation failed" });
 }
 
 function createPagination(input: {

@@ -26,6 +26,10 @@ function setRequiredEnv(overrides: Record<string, string | undefined> = {}): voi
     SUPERMEMORY_BASE_URL: undefined,
     HINDSIGHT_API_KEY: undefined,
     HINDSIGHT_BASE_URL: undefined,
+    HONCHO_API_KEY: undefined,
+    HONCHO_BASE_URL: undefined,
+    HONCHO_WORKSPACE_PREFIX: undefined,
+    HONCHO_TIMEOUT_MS: undefined,
     SPECTRUM_PROJECT_ID: "spectrum-project",
     SPECTRUM_PROJECT_SECRET: "spectrum-secret",
     PUBLIC_URL: "https://finn.example.com",
@@ -91,6 +95,7 @@ describe("buildCapabilities", () => {
 
     expect(capabilities.integrations.memory).toBe(false);
     expect(capabilities.integrations.supermemory).toBe(false);
+    expect(capabilities.integrations.honcho).toBe(false);
     expect(capabilities.tools.hotPath.search_memory).toBe(false);
     expect(capabilities.tools.hotPath.reflect_memory).toBe(false);
     expect(capabilities.tools.hotPath.files).toBe(true);
@@ -119,6 +124,21 @@ describe("buildCapabilities", () => {
 
     expect(capabilities.integrations.memory).toBe(true);
     expect(capabilities.integrations.hindsight).toBe(true);
+    expect(capabilities.tools.hotPath.search_memory).toBe(true);
+    expect(capabilities.tools.hotPath.reflect_memory).toBe(true);
+    expect(capabilities.tools.worker.memory).toBe(true);
+    expect(capabilities.tools.worker.memory_reflect).toBe(true);
+  });
+
+  it("enables memory search, profile, and reflection capabilities when Honcho is selected", () => {
+    const capabilities = buildCapabilities({
+      models,
+      integrations: { honcho: { apiKey: "test" } },
+      memoryMode: "tools",
+    });
+
+    expect(capabilities.integrations.memory).toBe(true);
+    expect(capabilities.integrations.honcho).toBe(true);
     expect(capabilities.tools.hotPath.search_memory).toBe(true);
     expect(capabilities.tools.hotPath.reflect_memory).toBe(true);
     expect(capabilities.tools.worker.memory).toBe(true);
@@ -542,6 +562,11 @@ describe("resolveMemoryProvider", () => {
     expect(resolveMemoryProvider({ integrations: { supermemory: { apiKey: "test" } } })).toBe("supermemory");
   });
 
+  it("defaults to Honcho when only Honcho is configured", () => {
+    expect(resolveMemoryProvider({ integrations: { honcho: { apiKey: "test" } } })).toBe("honcho");
+    expect(resolveMemoryProvider({ integrations: { honcho: { baseUrl: "https://honcho.example.com" } } })).toBe("honcho");
+  });
+
   it("requires an explicit provider when multiple memory providers are configured", () => {
     expect(() => resolveMemoryProvider({
       integrations: {
@@ -555,6 +580,7 @@ describe("resolveMemoryProvider", () => {
     expect(resolveMemoryProvider({ requested: "none", integrations: { supermemory: { apiKey: "test" } } })).toBe("none");
     expect(resolveMemoryProvider({ requested: "supermemory", integrations: { supermemory: { apiKey: "test" } } })).toBe("supermemory");
     expect(resolveMemoryProvider({ requested: "hindsight", integrations: { hindsight: { baseUrl: "https://hindsight.example.com" } } })).toBe("hindsight");
+    expect(resolveMemoryProvider({ requested: "honcho", integrations: { honcho: { apiKey: "test" } } })).toBe("honcho");
   });
 
   it("does not infer Hindsight from API key without base URL", () => {
@@ -579,6 +605,12 @@ describe("loadConfig memory provider validation", () => {
     setRequiredEnv({ MEMORY_PROVIDER: "hindsight", HINDSIGHT_BASE_URL: undefined });
 
     expect(() => loadConfig()).toThrow("MEMORY_PROVIDER=hindsight requires HINDSIGHT_BASE_URL");
+  });
+
+  it("rejects Honcho provider selection without a Honcho API key or base URL", () => {
+    setRequiredEnv({ MEMORY_PROVIDER: "honcho", HONCHO_API_KEY: undefined, HONCHO_BASE_URL: undefined });
+
+    expect(() => loadConfig()).toThrow("MEMORY_PROVIDER=honcho requires HONCHO_API_KEY or HONCHO_BASE_URL");
   });
 
   it("rejects multiple configured memory providers without explicit selection", () => {
@@ -606,6 +638,31 @@ describe("loadConfig memory provider validation", () => {
       autoRecallMaxResults: 8,
       provisionMentalModels: true,
     });
+    expect(config.capabilities.tools.hotPath.search_memory).toBe(true);
+    expect(config.capabilities.tools.hotPath.reflect_memory).toBe(true);
+  });
+
+  it("loads configured Honcho memory settings", () => {
+    setRequiredEnv({
+      MEMORY_PROVIDER: "honcho",
+      MEMORY_MODE: "hybrid",
+      HONCHO_API_KEY: "honcho-key",
+      HONCHO_BASE_URL: "https://honcho.example.com",
+      HONCHO_WORKSPACE_PREFIX: "finn-dev",
+      HONCHO_TIMEOUT_MS: "12000",
+    });
+
+    const config = loadConfig();
+
+    expect(config.memory.provider).toBe("honcho");
+    expect(config.memory.mode).toBe("hybrid");
+    expect(config.integrations?.honcho).toEqual({
+      apiKey: "honcho-key",
+      baseUrl: "https://honcho.example.com",
+      workspacePrefix: "finn-dev",
+      timeoutMs: 12000,
+    });
+    expect(config.capabilities.integrations.honcho).toBe(true);
     expect(config.capabilities.tools.hotPath.search_memory).toBe(true);
     expect(config.capabilities.tools.hotPath.reflect_memory).toBe(true);
   });

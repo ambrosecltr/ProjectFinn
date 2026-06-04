@@ -1,4 +1,4 @@
-import { WorkerToolOutputArtifactStore } from "@finn/core";
+import { WorkerToolOutputArtifactStore, formatUnknownError } from "@finn/core";
 import { createCodeModeCatalog, formatCodeModeSearchResults, type CodeModeCatalog, type CodeModeCatalogEntry, type CodeModeCatalogOptions } from "@finn/toolsets";
 import type { ToolsetRuntime } from "@finn/toolsets";
 import { createInMemoryFileSystem, createNodeDriver, NodeExecutionDriver, type BindingTree, type Permissions, type VirtualFileSystem } from "secure-exec";
@@ -56,32 +56,7 @@ const codeExecuteInputSchema = z.object({
 }).strict();
 
 function errorMessage(error: unknown): string {
-  if (error instanceof z.ZodError) {
-    return formatZodError("Tool input validation failed", error);
-  }
-  if (error instanceof Error) {
-    return error.message || error.name;
-  }
-  if (typeof error === "object" && error !== null) {
-    return safeJsonStringify(error);
-  }
-  return String(error);
-}
-
-function safeJsonStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function formatZodError(prefix: string, error: z.ZodError): string {
-  const issues = error.issues.map((issue) => {
-    const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
-    return `${path}: ${issue.message}`;
-  });
-  return `${prefix}: ${issues.join("; ")}`;
+  return formatUnknownError(error, { zodPrefix: "Tool input validation failed" });
 }
 
 function createSearch(catalog: CodeModeCatalog): CodeModeSearch {
@@ -121,28 +96,68 @@ function appendLog(logs: string[], channel: "stdout" | "stderr", message: string
 
 function serializeSandboxError(error: unknown): string {
   if (error instanceof Error) {
+    if (error.name === "FinnApiError") {
+      return error.message || error.name;
+    }
     return error.stack || error.message || error.name;
   }
   if (typeof error === "object" && error !== null) {
+    const seen = new WeakSet();
     try {
-      return JSON.stringify(error);
+      return JSON.stringify(error, (_key, entry) => {
+        if (typeof entry === "bigint") {
+          return entry.toString();
+        }
+        if (typeof entry === "function") {
+          return `[Function ${entry.name || "anonymous"}]`;
+        }
+        if (typeof entry === "object" && entry !== null) {
+          if (seen.has(entry)) {
+            return "[Circular]";
+          }
+          seen.add(entry);
+        }
+        return entry;
+      });
     } catch {
-      return String(error);
+      return Object.prototype.toString.call(error);
     }
   }
-  return String(error);
+  return error === undefined || error === null ? "Unknown error" : String(error);
 }
 
 function buildFinnApiBootstrap(entries: readonly CodeModeCatalogEntry[]): string {
   const registrations = entries.map((entry) => {
     const path = JSON.stringify(entry.apiPath);
     const apiName = JSON.stringify(entry.apiName);
-    return `__finnDefine(${path}, (input = {}) => __finnHost.call(${apiName}, input));`;
+    return `__finnDefine(${path}, (input = {}) => __finnCall(${apiName}, input));`;
   });
 
   return `
 const __finnHost = SecureExec.bindings.host;
 const __finnRoot = Object.create(null);
+function __finnThrowApiError(message) {
+  const error = new Error(String(message || "Finn JS workspace API failed."));
+  error.name = "FinnApiError";
+  throw error;
+}
+async function __finnCall(apiName, input = {}) {
+  const response = await __finnHost.call(apiName, input);
+  return __finnReadHostResponse(response);
+}
+async function __finnSearch(query, options = {}) {
+  const response = await __finnHost.search(query, options);
+  return __finnReadHostResponse(response);
+}
+function __finnReadHostResponse(response) {
+  if (!response || typeof response !== "object" || response.__finnHostCall !== true) {
+    __finnThrowApiError("Finn JS workspace host returned an invalid API response.");
+  }
+  if (response.ok === true) {
+    return response.value;
+  }
+  __finnThrowApiError(response.error);
+}
 function __finnDefine(path, fn) {
   let cursor = __finnRoot;
   for (const part of path.slice(0, -1)) {
@@ -151,7 +166,7 @@ function __finnDefine(path, fn) {
   }
   cursor[path[path.length - 1]] = fn;
 }
-__finnRoot.search = (query, options = {}) => __finnHost.search(query, options);
+__finnRoot.search = (query, options = {}) => __finnSearch(query, options);
 ${registrations.join("\n")}
 Object.defineProperty(globalThis, "finn", {
   value: __finnRoot,
@@ -275,14 +290,42 @@ export class SecureExecCodeModeExecutor implements CodeModeExecutor {
     });
     const bindings: BindingTree = {
       host: {
-        call: async (apiName: unknown, args: unknown) => this.requireActiveExecution().dispatch(String(apiName), args),
-        search: async (query: unknown, options: unknown) => this.requireActiveExecution().search(String(query), options as { limit?: number } | undefined),
+        call: async (apiName: unknown, args: unknown) => {
+          try {
+            return {
+              __finnHostCall: true,
+              ok: true,
+              value: await this.requireActiveExecution().dispatch(String(apiName), args),
+            };
+          } catch (error) {
+            return {
+              __finnHostCall: true,
+              ok: false,
+              error: errorMessage(error),
+            };
+          }
+        },
+        search: async (query: unknown, options: unknown) => {
+          try {
+            return {
+              __finnHostCall: true,
+              ok: true,
+              value: this.requireActiveExecution().search(String(query), options as { limit?: number } | undefined),
+            };
+          } catch (error) {
+            return {
+              __finnHostCall: true,
+              ok: false,
+              error: errorMessage(error),
+            };
+          }
+        },
         resolve: async (value: unknown) => {
           this.requireActiveExecution().resolve(value);
           return null;
         },
         reject: async (error: unknown) => {
-          this.requireActiveExecution().reject(String(error));
+          this.requireActiveExecution().reject(errorMessage(error));
           return null;
         },
       },

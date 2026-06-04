@@ -264,7 +264,7 @@ function renderAvailableWorkerToolInstructions(tools: ToolSet, options: { kidsMo
       "### Memory",
       "Use memory only when prior user context, previous Finn answers, cross-run continuity, or notification novelty materially changes the task.",
       hasTool(tools, "search_memory") ? `\`search_memory\` user scope: ${userMemoryDescription}` : "",
-      hasTool(tools, "reflect_memory") ? "`reflect_memory` asks Finn's memory layer to synthesize an answer when raw matching facts are not enough." : "",
+      hasTool(tools, "reflect_memory") ? "`reflect_memory` asks Finn's memory layer to synthesize an answer when raw matching facts are not enough. Its budget is a work budget, not a quality slider: low for simple/specific facts, mid for synthesis across a few related memories, and high only for broad, ambiguous, sensitive, or high-consequence synthesis." : "",
       hasPatternScope ? "Pattern workers may pass `scope: \"pattern\"` to inspect previous terminal outcomes for this same Pattern." : "",
       hasPatternScope ? "Pattern memory is not proof the user was notified; use user memory when user-visible novelty matters." : "",
       "Do not announce memory searches or mention memory mechanics in outcomes.",

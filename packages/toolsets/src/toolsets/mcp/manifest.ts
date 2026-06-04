@@ -75,6 +75,10 @@ export function createMcpManifest(options: McpManifestOptions): ToolsetManifest 
       examples: [
         { purpose: "Read one listed MCP resource", code: "await finn.mcp.readResource({ server: \"docs\", uri: \"docs://intro\" })" },
       ],
+      outputGuidance: [
+        "Use the returned resource content as read-only context. If the server returns multiple content parts, inspect each part before summarizing.",
+        "If the result reports an error or empty content, use finn.mcp.resources/search to verify the server and URI before retrying.",
+      ],
     },
     {
       name: "call",

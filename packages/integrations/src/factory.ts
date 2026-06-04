@@ -4,6 +4,7 @@ import { ComposioClient } from "./composio.js";
 import { ExaClient } from "./exa.js";
 import { FalClient } from "./fal.js";
 import { HindsightClient } from "./hindsight.js";
+import { HonchoClient } from "./honcho.js";
 import { SupermemoryClient } from "./supermemory.js";
 import type { IntegrationClients } from "./types.js";
 
@@ -64,6 +65,12 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
     unconfigured.push("hindsight");
   }
 
+  if (integrations.honcho?.apiKey || integrations.honcho?.baseUrl) {
+    configured.push("honcho");
+  } else {
+    unconfigured.push("honcho");
+  }
+
   switch (config.memory.provider) {
     case "none":
       unconfigured.push("memory");
@@ -89,6 +96,19 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
         configured.push("memory:hindsight");
       } else {
         unconfigured.push("memory:hindsight");
+      }
+      break;
+    case "honcho":
+      if (integrations.honcho?.apiKey || integrations.honcho?.baseUrl) {
+        clients.memory = new HonchoClient({
+          apiKey: integrations.honcho.apiKey,
+          baseUrl: integrations.honcho.baseUrl,
+          workspacePrefix: integrations.honcho.workspacePrefix,
+          timeoutMs: integrations.honcho.timeoutMs,
+        });
+        configured.push("memory:honcho");
+      } else {
+        unconfigured.push("memory:honcho");
       }
       break;
   }

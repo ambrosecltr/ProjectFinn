@@ -3,6 +3,7 @@ import {
   createFinnTelemetryContext,
   createProcessLogger,
   estimateTokens,
+  formatUnknownError,
   formatShortTimeZoneName,
   formatUserProfileContext,
   getTracer,
@@ -701,7 +702,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return formatUnknownError(error);
 }
 
 function hasDeliverableResult(result: Record<string, unknown>): boolean {

@@ -97,6 +97,8 @@ export {
   IntegrationError,
   StorageError,
 } from "./errors.js";
+export { formatUnknownError } from "./error-format.js";
+export type { FormatUnknownErrorOptions } from "./error-format.js";
 
 // Logger
 export {

@@ -3,6 +3,7 @@ import { APIError } from "supermemory";
 
 import { createIntegrationClients } from "./factory.js";
 import { HindsightClient } from "./hindsight.js";
+import { HonchoClient } from "./honcho.js";
 import { getSafeMemoryFailureReason } from "./memory.js";
 import { buildSupermemoryFilters, getSupermemoryFailureReason, SupermemoryClient } from "./supermemory.js";
 
@@ -396,6 +397,14 @@ describe("createIntegrationClients", () => {
     expect(createIntegrationClients({
       memory: { provider: "hindsight" },
       integrations: { hindsight: { apiKey: "test" } },
+    } as never).memory).toBeUndefined();
+    expect(createIntegrationClients({
+      memory: { provider: "honcho" },
+      integrations: { honcho: { apiKey: "test" } },
+    } as never).memory).toBeInstanceOf(HonchoClient);
+    expect(createIntegrationClients({
+      memory: { provider: "honcho" },
+      integrations: {},
     } as never).memory).toBeUndefined();
   });
 });

@@ -151,6 +151,7 @@
             "pages": [
               "operations/configuration",
               "operations/hindsight-memory",
+              "operations/honcho-memory",
               "operations/deployment"
             ]
           }

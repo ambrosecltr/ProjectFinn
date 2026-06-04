@@ -46,7 +46,7 @@ function renderHotPathMemoryAppendix(capabilities: AppConfig["capabilities"]): s
 
   return renderXmlPromptSection("memory_requirements", [
     "The `search_memory` tool can search Finn's user memory: durable context inferred from prior Finn/user interactions, including preferences, personal facts, communication style, history, and what Finn may already know or have told the user. You cannot add, edit, or delete memory.",
-    hasReflectMemory ? "The `reflect_memory` tool asks Finn's memory layer to synthesize an answer from that same user memory." : "",
+    hasReflectMemory ? "The `reflect_memory` tool asks Finn's memory layer to synthesize an answer from that same user memory. Its budget is a work budget, not a quality slider: low for simple/specific facts, mid for synthesis across a few related memories, and high only for broad, ambiguous, sensitive, or high-consequence synthesis." : "",
     "Auto-injected memory context may also appear in runtime context as compact semantic recall results. Treat it as best-effort: useful but incomplete, possibly noisy, and not a substitute for explicit memory search/reflect when accuracy matters.",
     "Use memory tools when user-specific context, prior conversation recall, user preferences/history, or a worker/Pattern-result novelty check would materially change the response.",
     "Before making a specific claim about core user information, use the current conversation, user profile, or relevant memory as evidence. Core user information includes names, relationships, family members, health details, locations, jobs, commitments, preferences, and other durable personal facts.",

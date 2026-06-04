@@ -1,11 +1,11 @@
 import { createLogger, loadConfig, type AppConfig, type MemoryProvider } from "@finn/core";
 import { getDb, getDbClient } from "@finn/db";
-import { HindsightClient, SupermemoryClient, getSafeMemoryFailureReason, type MemoryClient } from "@finn/integrations";
+import { HindsightClient, HonchoClient, SupermemoryClient, getSafeMemoryFailureReason, type MemoryClient } from "@finn/integrations";
 import { runMemoryBackfill, type MemoryBackfillKind, type MemoryBackfillOptions } from "../memory-backfill.js";
 
 const logger = createLogger("memory-backfill");
 const validKinds = ["hot_path_turn", "pattern_run_outcome", "user_profile_seed"] as const satisfies readonly MemoryBackfillKind[];
-const validProviders = ["supermemory", "hindsight"] as const satisfies readonly Exclude<MemoryProvider, "none">[];
+const validProviders = ["supermemory", "hindsight", "honcho"] as const satisfies readonly Exclude<MemoryProvider, "none">[];
 
 interface CliOptions {
   execute: boolean;
@@ -26,8 +26,8 @@ function printUsage(command = "memory:backfill"): void {
     "",
     "options:",
     "  --execute                 write documents instead of planning only",
-    "  --provider <provider>     supermemory or hindsight (default: MEMORY_PROVIDER)",
-    "  --kind <kind>             hot_path_turn, pattern_run_outcome, user_profile_seed (Supermemory only), or all (default: all)",
+    "  --provider <provider>     supermemory, hindsight, or honcho (default: MEMORY_PROVIDER)",
+    "  --kind <kind>             hot_path_turn, pattern_run_outcome, user_profile_seed, or all (default: all)",
     "  --tenant-id <tenant_id>   restrict to one tenant",
     "  --user-id <user_id>       restrict to one user",
     "  --since <iso_date>        only include records after this timestamp",
@@ -153,13 +153,24 @@ function createMemoryClientForProvider(config: AppConfig, provider: Exclude<Memo
         baseUrl,
       });
     }
+    case "honcho": {
+      const honcho = config.integrations?.honcho;
+      if (!honcho?.apiKey && !honcho?.baseUrl) {
+        throw new Error("HONCHO_API_KEY or HONCHO_BASE_URL is required for --provider honcho.");
+      }
+      return new HonchoClient({
+        apiKey: honcho.apiKey,
+        baseUrl: honcho.baseUrl,
+        workspacePrefix: honcho.workspacePrefix,
+      });
+    }
   }
 }
 
 function resolveProvider(config: AppConfig, cliProvider?: Exclude<MemoryProvider, "none">): Exclude<MemoryProvider, "none"> {
   const provider = cliProvider ?? config.memory.provider;
   if (provider === "none") {
-    throw new Error("No memory provider selected. Set MEMORY_PROVIDER or pass --provider supermemory|hindsight.");
+    throw new Error("No memory provider selected. Set MEMORY_PROVIDER or pass --provider supermemory|hindsight|honcho.");
   }
   return provider;
 }

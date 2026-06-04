@@ -15,7 +15,7 @@ export interface MemoryRuntimeService {
   reflectMemory?: (input: Omit<MemoryReflectInput, "user">) => ReturnType<NonNullable<MemoryClient["reflectMemory"]>>;
 }
 
-const profileContextTtlMs = 60_000;
+const profileContextTtlMs = 10 * 60_000;
 
 export function createMemoryRuntimeService(input: {
   client: MemoryClient;

@@ -94,7 +94,7 @@ export function createFilesManifest(options: FilesManifestOptions): ToolsetManif
         { purpose: "Read a run artifact slice", code: "await finn.files.read({ path: \"/artifacts/output.txt\", maxBytes: 6000, offset: 0 })" },
       ],
       outputGuidance: [
-        "The result contains the selected text slice plus offset/size metadata when available.",
+        "Read text from result.content. The result also includes path/fileId, offset, sizeBytes, truncated, and nextOffset metadata when available.",
         "If the result is truncated or more content is needed, call finn.files.read again with the next offset.",
       ],
     },

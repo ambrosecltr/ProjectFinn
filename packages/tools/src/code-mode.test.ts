@@ -3,7 +3,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { createToolsetRuntime, type ToolsetDefinition } from "@finn/toolsets";
 import { z } from "zod";
 import type { CodeModeExecutor } from "./code-mode.js";
-import { createCodeModeTools } from "./code-mode.js";
+import { SecureExecCodeModeExecutor, createCodeModeTools } from "./code-mode.js";
 
 const filesToolset = {
   manifest: {
@@ -161,5 +161,45 @@ describe("Finn JS workspace tools", () => {
       error: "Finn JS workspace API finn.files.objectError failed. {\"code\":\"REMOTE_FAIL\",\"message\":\"remote failed\"}",
       logs: [],
     });
+  });
+
+  it("preserves validation details across the real SecureExec host bridge", async () => {
+    const runtime = createRuntime();
+    const executor = new SecureExecCodeModeExecutor();
+    const tools = createCodeModeTools(runtime, { executor });
+
+    try {
+      const result = await tools.workspace_execute?.execute?.({
+        code: "return await finn.files.read('/artifacts/output.json');",
+      }, {} as never);
+
+      expect(result).toEqual({
+        success: false,
+        error: "Finn JS workspace API finn.files.read failed. Tool input validation failed: (root): Expected object, received string",
+        logs: [],
+      });
+    } finally {
+      executor.dispose();
+    }
+  });
+
+  it("preserves object-shaped tool errors across the real SecureExec host bridge", async () => {
+    const runtime = createRuntime();
+    const executor = new SecureExecCodeModeExecutor();
+    const tools = createCodeModeTools(runtime, { executor });
+
+    try {
+      const result = await tools.workspace_execute?.execute?.({
+        code: "return await finn.files.objectError({});",
+      }, {} as never);
+
+      expect(result).toEqual({
+        success: false,
+        error: "Finn JS workspace API finn.files.objectError failed. {\"code\":\"REMOTE_FAIL\",\"message\":\"remote failed\"}",
+        logs: [],
+      });
+    } finally {
+      executor.dispose();
+    }
   });
 });

@@ -3,6 +3,7 @@ import {
   createFinnTelemetryContext,
   createProcessLogger,
   estimateTokens,
+  formatUnknownError,
   formatShortTimeZoneName,
   formatInternalMessage,
   getTracer,
@@ -1343,7 +1344,7 @@ export class HotPathAgent {
               elapsed_ms: now - turnStartedAt,
               duration_ms: durationMs,
               success,
-              error: error instanceof Error ? error.message : error ? String(error) : "",
+              error: error ? formatUnknownError(error) : "",
             });
           },
           onStepFinish: ({ stepNumber, finishReason, toolCalls, usage }) => {
@@ -1366,7 +1367,7 @@ export class HotPathAgent {
           onError: ({ error }) => {
             span.addEvent("hot_path.stream_error", {
               elapsed_ms: Date.now() - turnStartedAt,
-              error: error instanceof Error ? error.message : String(error),
+              error: formatUnknownError(error),
             });
           },
           experimental_telemetry: createFinnTelemetry({
