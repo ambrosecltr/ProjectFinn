@@ -22,6 +22,7 @@ COPY packages/messaging/package.json packages/messaging/
 COPY packages/media/package.json packages/media/
 COPY packages/patterns/package.json packages/patterns/
 COPY packages/integrations/package.json packages/integrations/
+COPY packages/puter/package.json packages/puter/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 RUN bun install --frozen-lockfile

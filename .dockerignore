@@ -3,7 +3,8 @@ node_modules
 dist
 packages/**/node_modules
 packages/**/dist
-packages/puter
+packages/puter/**
+!packages/puter/package.json
 packages/admin
 packages/web/dist
 .DS_Store
