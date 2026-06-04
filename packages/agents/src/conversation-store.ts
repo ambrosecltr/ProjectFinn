@@ -2,6 +2,7 @@ import {
   createFinnTelemetry,
   estimateTokens,
   formatInternalMessage,
+  formatShortTimeZoneName,
   generateId,
   sanitizePostgresJson,
   sanitizePostgresText,
@@ -57,7 +58,7 @@ function formatPromptTimestamp(date: Date, timeZone: string): string {
   const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((part) => part.type === type)?.value ?? "";
 
-  return `${lookup("year")}-${lookup("month")}-${lookup("day")} ${lookup("hour")}:${lookup("minute")}:${lookup("second")} ${lookup("timeZoneName")}`.trim();
+  return `${lookup("year")}-${lookup("month")}-${lookup("day")} ${lookup("hour")}:${lookup("minute")}:${lookup("second")} ${formatShortTimeZoneName(date, timeZone, lookup("timeZoneName"))}`.trim();
 }
 
 function formatPromptHeader(turn: StoredConversationTurn, timeZone: string): string {

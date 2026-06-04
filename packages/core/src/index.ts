@@ -122,7 +122,7 @@ export {
 } from "./utils.js";
 export { normalizeOutgoingAssistantText } from "./text.js";
 export { normalizePhoneNumber } from "./phone.js";
-export { isValidTimeZone, listSupportedTimeZones, resolveTimeZone } from "./timezone.js";
+export { formatShortTimeZoneName, isValidTimeZone, listSupportedTimeZones, resolveTimeZone } from "./timezone.js";
 export { RateLimiter, type RateLimiterOpts } from "./rate-limiter.js";
 
 // Tracing (OpenTelemetry)

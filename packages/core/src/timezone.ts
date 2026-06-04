@@ -37,3 +37,17 @@ export function resolveTimeZone(timeZone: string | null | undefined, fallback = 
 
   return "UTC";
 }
+
+export function formatShortTimeZoneName(date: Date, timeZone: string, fallback: string): string {
+  if (!fallback.startsWith("GMT")) {
+    return fallback;
+  }
+
+  const longName = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    timeZoneName: "long",
+  }).formatToParts(date).find((part) => part.type === "timeZoneName")?.value;
+  const acronym = longName?.match(/\b[A-Z]/g)?.join("");
+  return acronym && acronym !== "GMT" ? acronym : fallback;
+}

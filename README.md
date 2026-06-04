@@ -71,6 +71,8 @@ DEFAULT_API_KEY=your-provider-api-key
 HINDSIGHT_API_LLM_API_KEY=your-hindsight-llm-key
 ```
 
+For OpenAI-compatible endpoints, use `DEFAULT_PROVIDER=openai-compatible`, set `DEFAULT_MODEL=openai-compatible:<model-name>`, and set `DEFAULT_BASE_URL` to the endpoint base URL including `/v1`. `DEFAULT_API_KEY` is optional only when that endpoint does not require authentication.
+
 The Hindsight compose file sets these container values for Finn automatically:
 
 ```env

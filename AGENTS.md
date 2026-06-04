@@ -20,7 +20,7 @@ FinnAI/                        # Git + workspace root
 ├── packages/
 │   ├── core/                  # Shared types, Zod config, EventBus, logger, errors, tracing
 │   ├── db/                    # Drizzle schema + Postgres client (singleton)
-│   ├── llm/                   # Provider-agnostic LLM abstraction (Anthropic/OpenAI/Fireworks)
+│   ├── llm/                   # Provider-agnostic LLM abstraction (Anthropic/OpenAI/Fireworks/DeepSeek/OpenAI-compatible)
 │   ├── agents/                # Agent implementations (hot-path, worker, compactor) ← has AGENTS.md
 │   ├── tools/                 # Tool definitions for hot-path + worker agents ← has AGENTS.md
 │   ├── messaging/             # Spectrum adapter, message routing, sender
@@ -175,7 +175,7 @@ docker compose restart finn            # Pick up identity/prompts changes
 
 - **Workspace root is the repo root** — `.git` and `package.json` now both live at `FinnAI/`.
 - **Prompts and identity are runtime code** — they're bind-mounted into Docker and loaded at startup. Changes require `docker compose restart finn` (no rebuild).
-- **Models configurable per process** — HOT_PATH_MODEL, WORKER_MODEL, COMPACTOR_MODEL. Format: `provider:model-name`. Defaults to Anthropic Claude Sonnet for hot-path/worker and OpenAI GPT-4o-mini for compactor.
+- **Models configurable per process** — `HOT_PATH_MODEL`, `WORKER_MODEL`, and `COMPACTOR_MODEL`. Format: `provider:model-name`; supported providers are `anthropic`, `openai`, `fireworks`, `deepseek`, and `openai-compatible`. OpenAI-compatible endpoints also require `DEFAULT_BASE_URL` or the process-specific `*_BASE_URL` override, including the `/v1` prefix. Defaults to Anthropic Claude Sonnet for hot-path/worker and OpenAI GPT-4o-mini for compactor.
 - **Hot-path ingress envs** — the live config uses `HOT_PATH_INGRESS_USER_GROUPING_WINDOW_MS` and `HOT_PATH_INGRESS_MAX_COALESCE_MESSAGES`.
 - **Compaction thresholds** — context management triggers compaction at 70% (warn), 80% (background), 90% (aggressive), 95% (emergency) of max context tokens (default 128K).
 - **Daily handoff summaries** — chapter rollover handoffs should stay focused on live personal continuity, not durable profile facts or Pattern operations that already live elsewhere in runtime context.

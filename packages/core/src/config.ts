@@ -45,7 +45,7 @@ const contextConfigSchema = z.object({
   }
 });
 
-const llmProviderSchema = z.enum(["anthropic", "openai", "fireworks", "deepseek"]);
+const llmProviderSchema = z.enum(["anthropic", "openai", "fireworks", "deepseek", "openai-compatible"]);
 const llmReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 const telemetryProviderSchema = z.enum(["none", "posthog"]);
 const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight"]);
@@ -69,6 +69,7 @@ const modelConfigSchema = z.object({
   reasoningEffort: llmReasoningEffortSchema.optional(),
   maxContextTokens: z.number().int().positive(),
   maxOutputTokens: z.number().int().positive().optional(),
+  baseUrl: z.string().url().optional(),
 });
 
 const processKeys = ["hotPath", "worker", "compactor"] as const;
@@ -79,6 +80,12 @@ type LLMReasoningEffort = z.infer<typeof llmReasoningEffortSchema>;
 type ModelConfig = z.infer<typeof modelConfigSchema>;
 export type MemoryProvider = z.infer<typeof memoryProviderSchema>;
 export type MemoryMode = z.infer<typeof memoryModeSchema>;
+
+const processEnvPrefixes: Record<ProcessConfigKey, string> = {
+  hotPath: "HOT_PATH",
+  worker: "WORKER",
+  compactor: "COMPACTOR",
+};
 
 export const requiredComposioToolkits = ["gmail", "outlook"] as const;
 
@@ -116,6 +123,37 @@ function validateModelProvider(modelConfig: { model: string; provider: string },
       code: z.ZodIssueCode.custom,
       path,
       message: `${modelConfig.model} does not match provider ${modelConfig.provider}.`,
+    });
+  }
+}
+
+function validateModelBaseUrl(
+  modelConfig: Pick<ModelConfig, "provider" | "baseUrl">,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  envName: string,
+): void {
+  if (modelConfig.provider === "openai-compatible" && !modelConfig.baseUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path,
+      message: `${envName} is required when provider is openai-compatible.`,
+    });
+  }
+}
+
+function validateModelApiKey(
+  modelConfig: Pick<ModelConfig, "provider">,
+  apiKey: string | undefined,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  envName: string,
+): void {
+  if (modelConfig.provider !== "openai-compatible" && !apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path,
+      message: `${envName} is required when provider is ${modelConfig.provider}.`,
     });
   }
 }
@@ -159,10 +197,10 @@ const configSchema = z.object({
   // LLM API keys per process. Process keys resolve from DEFAULT_API_KEY unless
   // overridden with HOT_PATH_API_KEY, WORKER_API_KEY, or COMPACTOR_API_KEY.
   apiKeys: z.object({
-    default: z.string().min(1),
-    hotPath: z.string().min(1),
-    worker: z.string().min(1),
-    compactor: z.string().min(1),
+    default: z.string().min(1).optional(),
+    hotPath: z.string().min(1).optional(),
+    worker: z.string().min(1).optional(),
+    compactor: z.string().min(1).optional(),
   }),
 
   capabilities: z.object({
@@ -315,8 +353,12 @@ const configSchema = z.object({
   }),
 }).superRefine((config, ctx) => {
   validateModelProvider(config.models.default, ctx, ["models", "default", "model"]);
+  validateModelBaseUrl(config.models.default, ctx, ["models", "default", "baseUrl"], "DEFAULT_BASE_URL");
+  validateModelApiKey(config.models.default, config.apiKeys.default, ctx, ["apiKeys", "default"], "DEFAULT_API_KEY");
   for (const key of processKeys) {
     validateModelProvider(config.models[key], ctx, ["models", key, "model"]);
+    validateModelBaseUrl(config.models[key], ctx, ["models", key, "baseUrl"], `${processEnvPrefixes[key]}_BASE_URL or DEFAULT_BASE_URL`);
+    validateModelApiKey(config.models[key], config.apiKeys[key], ctx, ["apiKeys", key], `${processEnvPrefixes[key]}_API_KEY or DEFAULT_API_KEY`);
   }
 
   if (config.memory.provider === "supermemory" && !config.integrations?.supermemory?.apiKey) {
@@ -413,6 +455,7 @@ function resolveProcessModelConfig(
   defaultModel: string,
   defaultMaxContextTokens: number,
   defaultMaxOutputTokens?: number,
+  defaultBaseUrl?: string,
 ): ModelConfig {
   const provider = resolveProvider(env(`${processName}_PROVIDER`, defaultProvider));
 
@@ -424,6 +467,9 @@ function resolveProcessModelConfig(
     maxOutputTokens: optionalEnv(`${processName}_MAX_OUTPUT_TOKENS`)
       ? envInt(`${processName}_MAX_OUTPUT_TOKENS`)
       : defaultMaxOutputTokens,
+    baseUrl: provider === "openai-compatible"
+      ? optionalEnv(`${processName}_BASE_URL`) ?? defaultBaseUrl
+      : undefined,
   };
 }
 
@@ -551,6 +597,7 @@ export function loadConfig(): AppConfig {
 
   const defaultProvider = resolveProvider(env("DEFAULT_PROVIDER"));
   const defaultModel = env("DEFAULT_MODEL");
+  const defaultBaseUrl = optionalEnv("DEFAULT_BASE_URL");
   const defaultMaxContextTokens = envInt("DEFAULT_MAX_CONTEXT_TOKENS", envInt("HOT_PATH_MAX_CONTEXT_TOKENS", 128_000));
   const defaultMaxOutputTokens = optionalEnv("DEFAULT_MAX_OUTPUT_TOKENS")
     ? envInt("DEFAULT_MAX_OUTPUT_TOKENS")
@@ -562,13 +609,14 @@ export function loadConfig(): AppConfig {
       reasoningEffort: resolveReasoningEffort("DEFAULT", defaultProvider),
       maxContextTokens: defaultMaxContextTokens,
       maxOutputTokens: defaultMaxOutputTokens,
+      baseUrl: defaultProvider === "openai-compatible" ? defaultBaseUrl : undefined,
     },
-    hotPath: resolveProcessModelConfig("HOT_PATH", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens),
-    worker: resolveProcessModelConfig("WORKER", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens),
-    compactor: resolveProcessModelConfig("COMPACTOR", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens),
+    hotPath: resolveProcessModelConfig("HOT_PATH", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens, defaultBaseUrl),
+    worker: resolveProcessModelConfig("WORKER", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens, defaultBaseUrl),
+    compactor: resolveProcessModelConfig("COMPACTOR", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens, defaultBaseUrl),
   };
 
-  const defaultApiKey = env("DEFAULT_API_KEY");
+  const defaultApiKey = optionalEnv("DEFAULT_API_KEY");
   const apiKeys = {
     default: defaultApiKey,
     hotPath: optionalEnv("HOT_PATH_API_KEY") ?? defaultApiKey,

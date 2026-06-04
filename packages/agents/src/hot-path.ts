@@ -3,6 +3,7 @@ import {
   createFinnTelemetryContext,
   createProcessLogger,
   estimateTokens,
+  formatShortTimeZoneName,
   formatInternalMessage,
   getTracer,
   activeToolNamesForCategories,
@@ -433,7 +434,7 @@ export function buildTrailingTurnRules(): string {
 }
 
 function formatRuntimeTimestamp(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
@@ -443,7 +444,12 @@ function formatRuntimeTimestamp(date: Date, timeZone: string): string {
     second: "2-digit",
     hourCycle: "h23",
     timeZoneName: "short",
-  }).format(date);
+  });
+  const parts = formatter.formatToParts(date);
+  const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${lookup("year")}-${lookup("month")}-${lookup("day")}, ${lookup("hour")}:${lookup("minute")}:${lookup("second")} ${formatShortTimeZoneName(date, timeZone, lookup("timeZoneName"))}`.trim();
 }
 
 export interface MessageSender {

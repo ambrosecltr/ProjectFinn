@@ -29,7 +29,13 @@ function toProcessConfigKey(processType: ProcessType): ProcessConfigKey {
 }
 
 function toProviderName(provider: string): LLMProviderName {
-  if (provider === "anthropic" || provider === "openai" || provider === "fireworks" || provider === "deepseek") {
+  if (
+    provider === "anthropic"
+    || provider === "openai"
+    || provider === "fireworks"
+    || provider === "deepseek"
+    || provider === "openai-compatible"
+  ) {
     return provider;
   }
 
@@ -42,6 +48,7 @@ function parseModelConfig(config: {
   reasoningEffort?: ModelConfig["reasoningEffort"];
   maxContextTokens: number;
   maxOutputTokens?: number;
+  baseUrl?: string;
 }): ModelConfig {
   const separatorIndex = config.model.indexOf(":");
 
@@ -69,6 +76,7 @@ function parseModelConfig(config: {
     reasoningEffort: config.reasoningEffort,
     maxContextTokens: config.maxContextTokens,
     maxOutputTokens: config.maxOutputTokens,
+    baseUrl: config.baseUrl,
   };
 }
 
@@ -79,13 +87,13 @@ export class LLMManager {
     const processConfigKey = toProcessConfigKey(processType);
     const modelConfig = parseModelConfig(this.config.models[processConfigKey]);
 
-    return getProvider(modelConfig.provider, this.config.apiKeys[processConfigKey])(modelConfig.model);
+    return getProvider(modelConfig.provider, this.config.apiKeys[processConfigKey], modelConfig.baseUrl)(modelConfig.model);
   }
 
   getModelForKey(key: ProcessConfigKey): LanguageModelV1 {
     const modelConfig = parseModelConfig(this.config.models[key]);
 
-    return getProvider(modelConfig.provider, this.config.apiKeys[key])(modelConfig.model);
+    return getProvider(modelConfig.provider, this.config.apiKeys[key], modelConfig.baseUrl)(modelConfig.model);
   }
 
   getMaxSteps(processType: ProcessType): number {

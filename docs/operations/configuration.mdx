@@ -19,9 +19,10 @@ These settings are the minimum viable configuration. Finn fails startup if any a
 | `SPECTRUM_PROJECT_SECRET` | required |
 | `PUBLIC_URL` | required and must be a valid URL |
 | `DATABASE_URL` | required |
-| `DEFAULT_PROVIDER` | required; `anthropic`, `openai`, `fireworks`, or `deepseek` |
+| `DEFAULT_PROVIDER` | required; `anthropic`, `openai`, `fireworks`, `deepseek`, or `openai-compatible` |
 | `DEFAULT_MODEL` | required; provider-prefixed model string |
-| `DEFAULT_API_KEY` | required; API key for `DEFAULT_PROVIDER` |
+| `DEFAULT_API_KEY` | required for hosted providers; optional only for unauthenticated OpenAI-compatible endpoints |
+| `DEFAULT_BASE_URL` | required when `DEFAULT_PROVIDER=openai-compatible`; include the OpenAI-compatible API base URL, usually ending in `/v1` |
 
 With only these values, Finn can receive and send iMessages, store files, use profile/conversation context, and run all LLM processes on the same model/provider. Optional integrations only become available when their own config is present.
 
@@ -68,25 +69,29 @@ Every runtime process resolves from the default model/provider/key unless a proc
 |---|---|
 | `DEFAULT_PROVIDER` | none; required |
 | `DEFAULT_MODEL` | none; required |
-| `DEFAULT_API_KEY` | none; required |
+| `DEFAULT_API_KEY` | none; required for hosted providers |
+| `DEFAULT_BASE_URL` | unset; required when `DEFAULT_PROVIDER=openai-compatible` |
 | `DEFAULT_MAX_CONTEXT_TOKENS` | `128000` |
 | `DEFAULT_MAX_OUTPUT_TOKENS` | unset |
 | `DEFAULT_REASONING_EFFORT` | unset; DeepSeek only |
 | `HOT_PATH_MODEL` | `DEFAULT_MODEL` |
 | `HOT_PATH_PROVIDER` | `DEFAULT_PROVIDER` |
 | `HOT_PATH_API_KEY` | `DEFAULT_API_KEY` |
+| `HOT_PATH_BASE_URL` | `DEFAULT_BASE_URL`; OpenAI-compatible only |
 | `HOT_PATH_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
 | `HOT_PATH_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
 | `HOT_PATH_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; DeepSeek only |
 | `WORKER_MODEL` | `DEFAULT_MODEL` |
 | `WORKER_PROVIDER` | `DEFAULT_PROVIDER` |
 | `WORKER_API_KEY` | `DEFAULT_API_KEY` |
+| `WORKER_BASE_URL` | `DEFAULT_BASE_URL`; OpenAI-compatible only |
 | `WORKER_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
 | `WORKER_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
 | `WORKER_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; DeepSeek only |
 | `COMPACTOR_MODEL` | `DEFAULT_MODEL` |
 | `COMPACTOR_PROVIDER` | `DEFAULT_PROVIDER` |
 | `COMPACTOR_API_KEY` | `DEFAULT_API_KEY` |
+| `COMPACTOR_BASE_URL` | `DEFAULT_BASE_URL`; OpenAI-compatible only |
 | `COMPACTOR_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
 | `COMPACTOR_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
 | `COMPACTOR_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; DeepSeek only |
@@ -97,8 +102,11 @@ Supported providers:
 - `openai`
 - `fireworks`
 - `deepseek`
+- `openai-compatible`
 
 The provider and model string need to agree. If they do not, startup validation should fail.
+
+OpenAI-compatible model strings use the `openai-compatible:` prefix, for example `openai-compatible:local-chat-model`. Base URLs must include the provider's OpenAI-compatible API prefix, commonly `/v1`. API keys are optional only when the endpoint accepts unauthenticated requests.
 
 Legacy provider-key envs such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `FIREWORKS_API_KEY` are no longer read by the runtime. Put the active key in `DEFAULT_API_KEY`, or use the process-specific `*_API_KEY` override when a process uses a different provider/account.
 

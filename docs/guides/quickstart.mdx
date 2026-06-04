@@ -12,7 +12,7 @@ You need:
 - Bun 1.x
 - Docker Desktop or a local Postgres 16+ instance
 - Photon Spectrum iMessage project credentials
-- At least one model provider key: Anthropic, OpenAI, Fireworks, or DeepSeek
+- At least one hosted model provider key, or an OpenAI-compatible endpoint. Supported providers are Anthropic, OpenAI, Fireworks, DeepSeek, and OpenAI-compatible.
 
 Optional but useful:
 
@@ -48,11 +48,12 @@ At minimum, fill in these values:
 | `SPECTRUM_PROJECT_SECRET` | Spectrum project secret |
 | `PUBLIC_URL` | Base URL for webhooks and file links |
 | `DATABASE_URL` | Postgres connection string |
-| `DEFAULT_PROVIDER` | Default LLM provider: `anthropic`, `openai`, `fireworks`, or `deepseek` |
+| `DEFAULT_PROVIDER` | Default LLM provider: `anthropic`, `openai`, `fireworks`, `deepseek`, or `openai-compatible` |
 | `DEFAULT_MODEL` | Default provider-prefixed model string |
-| `DEFAULT_API_KEY` | API key for the default provider |
+| `DEFAULT_API_KEY` | API key for the default provider; optional only for unauthenticated OpenAI-compatible endpoints |
+| `DEFAULT_BASE_URL` | Required for OpenAI-compatible endpoints; include the `/v1` prefix |
 
-If you only want one provider/model across Finn, leave the `HOT_PATH_*`, `WORKER_*`, and `COMPACTOR_*` LLM overrides empty. Use those process-specific overrides only when a process needs a different provider, model, or API key.
+If you only want one provider/model across Finn, leave the `HOT_PATH_*`, `WORKER_*`, and `COMPACTOR_*` LLM overrides empty. Use those process-specific overrides only when a process needs a different provider, model, API key, or OpenAI-compatible base URL.
 
 Set `SPECTRUM_ALLOWED_NUMBERS` when you want a self-hosted allowlist and boot-time user provisioning. It is optional for runtime config, but most local demos set it to the phone numbers that should be allowed to text Finn.
 

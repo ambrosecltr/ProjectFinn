@@ -97,6 +97,8 @@ ADMIN_BEARER_TOKEN=replace-with-a-long-random-token
 WORKER_WORKSPACES_PATH=/data/workspaces
 ```
 
+If deploying against an OpenAI-compatible model endpoint, set `DEFAULT_PROVIDER=openai-compatible`, use an `openai-compatible:<model-name>` `DEFAULT_MODEL`, and add `DEFAULT_BASE_URL=https://.../v1`. `DEFAULT_API_KEY` may be omitted only when that endpoint is unauthenticated.
+
 The compose file sets `DATABASE_URL` and `WORKER_WORKSPACES_PATH` for the containers, so you normally should not set those manually in Dokploy.
 
 If you want Dokploy to run Hindsight too, use `docker-compose.hindsight.yml` and also set:

@@ -9,6 +9,7 @@
         "@ai-sdk/deepseek": "^2.0.35",
         "@ai-sdk/fireworks": "^2",
         "@ai-sdk/openai": "^3",
+        "@ai-sdk/openai-compatible": "^2",
         "@composio/core": "^0.10.0",
         "@composio/vercel": "^0.9.2",
         "@daytona/sdk": "^0.171.0",

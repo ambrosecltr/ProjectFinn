@@ -4,13 +4,13 @@ import type { AppConfig } from "@finn/core";
 
 import { LLMManager } from "./manager.js";
 
-function createConfig(provider: "anthropic" | "openai" | "fireworks" | "deepseek"): AppConfig {
+function createConfig(provider: "anthropic" | "openai" | "fireworks" | "deepseek" | "openai-compatible"): AppConfig {
   return {
     models: {
-      default: { provider, model: `${provider}:model`, maxContextTokens: 100_000 },
-      hotPath: { provider, model: `${provider}:hot`, maxContextTokens: 100_000 },
-      worker: { provider, model: `${provider}:worker`, maxContextTokens: 100_000 },
-      compactor: { provider, model: `${provider}:compactor`, maxContextTokens: 100_000 },
+      default: { provider, model: `${provider}:model`, maxContextTokens: 100_000, baseUrl: provider === "openai-compatible" ? "https://models.example.com/v1" : undefined },
+      hotPath: { provider, model: `${provider}:hot`, maxContextTokens: 100_000, baseUrl: provider === "openai-compatible" ? "https://models.example.com/v1" : undefined },
+      worker: { provider, model: `${provider}:worker`, maxContextTokens: 100_000, baseUrl: provider === "openai-compatible" ? "https://models.example.com/v1" : undefined },
+      compactor: { provider, model: `${provider}:compactor`, maxContextTokens: 100_000, baseUrl: provider === "openai-compatible" ? "https://models.example.com/v1" : undefined },
     },
     apiKeys: {
       default: "key",
@@ -44,6 +44,12 @@ describe("LLMManager request options", () => {
 
   it("does not add Fireworks-only options for other providers", () => {
     const manager = new LLMManager(createConfig("anthropic"));
+
+    expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({});
+  });
+
+  it("does not add provider-specific options for OpenAI-compatible providers", () => {
+    const manager = new LLMManager(createConfig("openai-compatible"));
 
     expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({});
   });

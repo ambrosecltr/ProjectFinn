@@ -3,6 +3,7 @@ import {
   createFinnTelemetryContext,
   createProcessLogger,
   estimateTokens,
+  formatShortTimeZoneName,
   formatUserProfileContext,
   getTracer,
   loadIdentityFile,
@@ -71,7 +72,7 @@ const maxWorkerCompactionSummaryTokens = 1_200;
 const maxCheckpointPersistenceRepairAttempts = 2;
 const workerPersistenceRepairPrefix = "[worker runtime repair - not from the user]";
 function formatRuntimeTimestamp(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
@@ -81,7 +82,12 @@ function formatRuntimeTimestamp(date: Date, timeZone: string): string {
     second: "2-digit",
     hourCycle: "h23",
     timeZoneName: "short",
-  }).format(date);
+  });
+  const parts = formatter.formatToParts(date);
+  const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${lookup("year")}-${lookup("month")}-${lookup("day")}, ${lookup("hour")}:${lookup("minute")}:${lookup("second")} ${formatShortTimeZoneName(date, timeZone, lookup("timeZoneName"))}`.trim();
 }
 
 function normalizeOutcome(detail: z.infer<typeof outcomeDetailSchema>): WorkerResult {

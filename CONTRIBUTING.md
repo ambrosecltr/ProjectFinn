@@ -24,7 +24,7 @@ For large features, architectural shifts, or new integrations, open an issue or 
 - PostgreSQL 16+
 - Docker Desktop or Docker Engine
 - Photon Spectrum project credentials if you want to exercise the live iMessage path
-- At least one supported LLM provider key
+- At least one hosted LLM provider key, or access to an OpenAI-compatible endpoint
 
 ### Clone and install
 

@@ -33,6 +33,7 @@ function setRequiredEnv(overrides: Record<string, string | undefined> = {}): voi
     DEFAULT_PROVIDER: "openai",
     DEFAULT_MODEL: "openai:gpt-4o-mini",
     DEFAULT_API_KEY: "test-key",
+    DEFAULT_BASE_URL: undefined,
     DEFAULT_REASONING_EFFORT: undefined,
     DEFAULT_MAX_CONTEXT_TOKENS: undefined,
     DEFAULT_MAX_OUTPUT_TOKENS: undefined,
@@ -40,18 +41,21 @@ function setRequiredEnv(overrides: Record<string, string | undefined> = {}): voi
     HOT_PATH_PROVIDER: undefined,
     HOT_PATH_MODEL: undefined,
     HOT_PATH_API_KEY: undefined,
+    HOT_PATH_BASE_URL: undefined,
     HOT_PATH_REASONING_EFFORT: undefined,
     HOT_PATH_MAX_CONTEXT_TOKENS: undefined,
     HOT_PATH_MAX_OUTPUT_TOKENS: undefined,
     WORKER_PROVIDER: undefined,
     WORKER_MODEL: undefined,
     WORKER_API_KEY: undefined,
+    WORKER_BASE_URL: undefined,
     WORKER_REASONING_EFFORT: undefined,
     WORKER_MAX_CONTEXT_TOKENS: undefined,
     WORKER_MAX_OUTPUT_TOKENS: undefined,
     COMPACTOR_PROVIDER: undefined,
     COMPACTOR_MODEL: undefined,
     COMPACTOR_API_KEY: undefined,
+    COMPACTOR_BASE_URL: undefined,
     COMPACTOR_REASONING_EFFORT: undefined,
     COMPACTOR_MAX_CONTEXT_TOKENS: undefined,
     COMPACTOR_MAX_OUTPUT_TOKENS: undefined,
@@ -296,6 +300,48 @@ describe("loadConfig automation intervals", () => {
 });
 
 describe("loadConfig LLM models", () => {
+  it("loads OpenAI-compatible endpoints with an optional API key", () => {
+    setRequiredEnv({
+      DEFAULT_PROVIDER: "openai-compatible",
+      DEFAULT_MODEL: "openai-compatible:local-chat-model",
+      DEFAULT_API_KEY: undefined,
+      DEFAULT_BASE_URL: "http://localhost:1234/v1",
+    });
+
+    const config = loadConfig();
+
+    expect(config.models.default).toEqual({
+      provider: "openai-compatible",
+      model: "openai-compatible:local-chat-model",
+      baseUrl: "http://localhost:1234/v1",
+      maxContextTokens: 128_000,
+    });
+    expect(config.models.hotPath.baseUrl).toBe("http://localhost:1234/v1");
+    expect(config.models.worker.baseUrl).toBe("http://localhost:1234/v1");
+    expect(config.models.compactor.baseUrl).toBe("http://localhost:1234/v1");
+    expect(config.apiKeys.default).toBeUndefined();
+    expect(config.capabilities.llm.defaultProvider).toBe("openai-compatible");
+  });
+
+  it("allows process-specific OpenAI-compatible base URL overrides", () => {
+    setRequiredEnv({
+      WORKER_PROVIDER: "openai-compatible",
+      WORKER_MODEL: "openai-compatible:worker-model",
+      WORKER_BASE_URL: "https://models.example.com/v1",
+    });
+
+    const config = loadConfig();
+
+    expect(config.models.hotPath.baseUrl).toBeUndefined();
+    expect(config.models.worker).toEqual({
+      provider: "openai-compatible",
+      model: "openai-compatible:worker-model",
+      baseUrl: "https://models.example.com/v1",
+      maxContextTokens: 128_000,
+    });
+    expect(config.models.compactor.baseUrl).toBeUndefined();
+  });
+
   it("loads DeepSeek as a model provider", () => {
     setRequiredEnv({
       DEFAULT_PROVIDER: "deepseek",
@@ -310,6 +356,34 @@ describe("loadConfig LLM models", () => {
       maxContextTokens: 128_000,
     });
     expect(config.capabilities.llm.defaultProvider).toBe("deepseek");
+  });
+
+  it("rejects OpenAI-compatible endpoints without a base URL", () => {
+    setRequiredEnv({
+      DEFAULT_PROVIDER: "openai-compatible",
+      DEFAULT_MODEL: "openai-compatible:local-chat-model",
+      DEFAULT_API_KEY: undefined,
+      DEFAULT_BASE_URL: undefined,
+    });
+
+    expect(() => loadConfig()).toThrow("DEFAULT_BASE_URL");
+  });
+
+  it("rejects invalid OpenAI-compatible base URLs", () => {
+    setRequiredEnv({
+      DEFAULT_PROVIDER: "openai-compatible",
+      DEFAULT_MODEL: "openai-compatible:local-chat-model",
+      DEFAULT_API_KEY: undefined,
+      DEFAULT_BASE_URL: "not-a-url",
+    });
+
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it("still requires API keys for non-compatible providers", () => {
+    setRequiredEnv({ DEFAULT_API_KEY: undefined });
+
+    expect(() => loadConfig()).toThrow("DEFAULT_API_KEY");
   });
 
   it("loads default context and output limits for every LLM process", () => {
