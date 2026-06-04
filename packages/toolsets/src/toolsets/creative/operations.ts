@@ -1,16 +1,13 @@
 import type { CreativeRuntimeService } from "@finn/runtime";
+import { formatToolsetError } from "../../utils.js";
 import { creativeImageInputSchema, creativeVideoInputSchema } from "./schemas.js";
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown error";
-}
 
 export async function creativeImageCommand(runtime: CreativeRuntimeService, input: unknown) {
   const parsed = creativeImageInputSchema.parse(input);
   try {
     return await runtime.createOrEditImage(parsed);
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 
@@ -19,7 +16,7 @@ export async function creativeVideoCommand(runtime: CreativeRuntimeService, inpu
   try {
     return await runtime.createOrEditVideo(parsed);
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 

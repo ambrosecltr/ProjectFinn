@@ -26,7 +26,7 @@ export const toolCategoryTools = {
 
   web: ["finn.web.search", "finn.web.fetch"],
   creative: ["finn.creative.image", "finn.creative.video"],
-  files: ["finn.files.list", "finn.files.read", "finn.files.search", "finn.files.extract", "finn.files.viewImage", "finn.files.write", "finn.files.download", "finn.files.setVisibility"],
+  files: ["finn.files.list", "finn.files.read", "finn.files.search", "finn.files.extract", "finn.files.write", "finn.files.download", "finn.files.setVisibility"],
   workspace_execute: ["workspace_search", "workspace_execute"],
   workspace_patch: ["finn.files.patch"],
   skills: [

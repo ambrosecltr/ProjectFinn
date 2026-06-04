@@ -52,6 +52,9 @@ export function createFilesManifest(options: FilesManifestOptions): ToolsetManif
           { purpose: "Show a generated deliverable in Library", code: "await finn.files.setVisibility({ fileId: \"file_123\", userVisible: true })" },
           { purpose: "Hide an internal stored file", code: "await finn.files.setVisibility({ fileId: \"file_123\", userVisible: false })" },
         ],
+        outputGuidance: [
+          "Use the returned file record as the source of truth for userVisible state and file metadata.",
+        ],
       }];
   const commands: ToolsetCommandDefinition[] = [
     {
@@ -89,6 +92,10 @@ export function createFilesManifest(options: FilesManifestOptions): ToolsetManif
       examples: [
         { purpose: "Read a stored Library text file", code: "await finn.files.read({ fileId: \"file_123\", maxBytes: 4000 })" },
         { purpose: "Read a run artifact slice", code: "await finn.files.read({ path: \"/artifacts/output.txt\", maxBytes: 6000, offset: 0 })" },
+      ],
+      outputGuidance: [
+        "The result contains the selected text slice plus offset/size metadata when available.",
+        "If the result is truncated or more content is needed, call finn.files.read again with the next offset.",
       ],
     },
     {
@@ -128,6 +135,10 @@ export function createFilesManifest(options: FilesManifestOptions): ToolsetManif
         { purpose: "Write a temporary artifact in a read-only process", code: "await finn.files.write({ path: \"/artifacts/notes.txt\", content: \"Checked invoice email\" })" },
         { purpose: "Create a visible text deliverable", code: "await finn.files.write({ path: \"reports/summary.md\", content: \"# Summary\", userVisible: true, mimeType: \"text/markdown\" })" },
       ],
+      outputGuidance: [
+        "The result includes the written path and may include a stored fileId when the content was stored in Finn Library.",
+        "Use returned paths or file IDs exactly in follow-up files APIs.",
+      ],
     },
     {
       name: "patch",
@@ -163,6 +174,10 @@ export function createFilesManifest(options: FilesManifestOptions): ToolsetManif
       examples: [
         { purpose: "Download a document for internal extraction in a read-only process", code: "await finn.files.download({ url: \"https://example.com/report.pdf\", path: \"/artifacts/report.pdf\", userVisible: false })" },
         { purpose: "Download a user-visible deliverable", code: "await finn.files.download({ url: \"https://example.com/photo.png\", path: \"/workspace/files/photo.png\", userVisible: true })" },
+      ],
+      outputGuidance: [
+        "Use the returned path for follow-up read/extract calls, or the returned fileId when the download was stored in Finn Library.",
+        "If download fails, inspect the error before retrying; do not assume private or redirected URLs are allowed.",
       ],
     },
   ];

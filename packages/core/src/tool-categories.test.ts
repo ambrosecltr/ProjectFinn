@@ -42,7 +42,7 @@ describe("tool categories", () => {
 
   it("maps worker and internal automation categories", () => {
     expect(toolCategoryTools.web).toEqual(["finn.web.search", "finn.web.fetch"]);
-    expect(toolCategoryTools.files).toEqual(["finn.files.list", "finn.files.read", "finn.files.search", "finn.files.extract", "finn.files.viewImage", "finn.files.write", "finn.files.download", "finn.files.setVisibility"]);
+    expect(toolCategoryTools.files).toEqual(["finn.files.list", "finn.files.read", "finn.files.search", "finn.files.extract", "finn.files.write", "finn.files.download", "finn.files.setVisibility"]);
     expect(toolCategoryTools.workspace_execute).toEqual(["workspace_search", "workspace_execute"]);
     expect(toolCategoryTools.workspace_patch).toEqual(["finn.files.patch"]);
     expect(toolCategoryTools.memory_user).toEqual(["search_memory", "reflect_memory"]);

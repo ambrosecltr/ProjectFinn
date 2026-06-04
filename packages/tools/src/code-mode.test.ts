@@ -30,6 +30,12 @@ const filesToolset = {
           contents: z.string().describe("File contents."),
         }),
       },
+      {
+        name: "object-error",
+        description: "Throw an object-shaped error.",
+        effects: ["read"],
+        inputSchema: z.object({}).strict(),
+      },
     ],
   },
   executors: {
@@ -40,6 +46,9 @@ const filesToolset = {
     write: mock(async (input: unknown) => {
       const parsed = z.object({ path: z.string(), contents: z.string() }).parse(input);
       return { path: parsed.path, bytes: parsed.contents.length };
+    }),
+    "object-error": mock(() => {
+      throw { code: "REMOTE_FAIL", message: "remote failed" };
     }),
   },
 } satisfies ToolsetDefinition;
@@ -106,6 +115,50 @@ describe("Finn JS workspace tools", () => {
     expect(result).toEqual({
       success: false,
       error: "Finn JS workspace API is not available in this runtime: finn.files.delete",
+      logs: [],
+    });
+  });
+
+  it("returns validation details for Finn API input errors", async () => {
+    const runtime = createRuntime();
+    const executor: CodeModeExecutor = {
+      execute: async ({ dispatch }) => ({
+        success: true,
+        result: await dispatch("finn.files.write", { path: "/workspace/note.txt" }),
+        logs: [],
+      }),
+    };
+    const tools = createCodeModeTools(runtime, { executor });
+
+    const result = await tools.workspace_execute?.execute?.({
+      code: "return await finn.files.write({ path: '/workspace/note.txt' });",
+    }, {} as never);
+
+    expect(result).toEqual({
+      success: false,
+      error: "Finn JS workspace API finn.files.write failed. Tool input validation failed: contents: Required",
+      logs: [],
+    });
+  });
+
+  it("returns readable details for object-shaped tool errors", async () => {
+    const runtime = createRuntime();
+    const executor: CodeModeExecutor = {
+      execute: async ({ dispatch }) => ({
+        success: true,
+        result: await dispatch("finn.files.objectError", {}),
+        logs: [],
+      }),
+    };
+    const tools = createCodeModeTools(runtime, { executor });
+
+    const result = await tools.workspace_execute?.execute?.({
+      code: "return await finn.files.objectError({});",
+    }, {} as never);
+
+    expect(result).toEqual({
+      success: false,
+      error: "Finn JS workspace API finn.files.objectError failed. {\"code\":\"REMOTE_FAIL\",\"message\":\"remote failed\"}",
       logs: [],
     });
   });

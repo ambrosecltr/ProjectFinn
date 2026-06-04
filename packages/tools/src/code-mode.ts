@@ -56,10 +56,32 @@ const codeExecuteInputSchema = z.object({
 }).strict();
 
 function errorMessage(error: unknown): string {
+  if (error instanceof z.ZodError) {
+    return formatZodError("Tool input validation failed", error);
+  }
   if (error instanceof Error) {
     return error.message || error.name;
   }
+  if (typeof error === "object" && error !== null) {
+    return safeJsonStringify(error);
+  }
   return String(error);
+}
+
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatZodError(prefix: string, error: z.ZodError): string {
+  const issues = error.issues.map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+    return `${path}: ${issue.message}`;
+  });
+  return `${prefix}: ${issues.join("; ")}`;
 }
 
 function createSearch(catalog: CodeModeCatalog): CodeModeSearch {
@@ -76,12 +98,16 @@ function createDispatch(runtime: ToolsetRuntime, catalog: CodeModeCatalog, abort
       throw new Error(`Finn JS workspace API is not available in this runtime: ${apiName}`);
     }
 
-    const executed = await runtime.execute({
-      toolset: entry.toolset,
-      command: entry.command,
-      args,
-    }, { abortSignal });
-    return executed.result;
+    try {
+      const executed = await runtime.execute({
+        toolset: entry.toolset,
+        command: entry.command,
+        args,
+      }, { abortSignal });
+      return executed.result;
+    } catch (error) {
+      throw new Error(`Finn JS workspace API ${apiName} failed. ${errorMessage(error)}`);
+    }
   };
 }
 
@@ -96,6 +122,13 @@ function appendLog(logs: string[], channel: "stdout" | "stderr", message: string
 function serializeSandboxError(error: unknown): string {
   if (error instanceof Error) {
     return error.stack || error.message || error.name;
+  }
+  if (typeof error === "object" && error !== null) {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
   }
   return String(error);
 }

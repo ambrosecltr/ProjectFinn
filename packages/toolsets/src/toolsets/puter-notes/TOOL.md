@@ -36,4 +36,4 @@ You can run independent reads back to back when useful, for example a broad note
 - Treat Notes as authored-by-user evidence, but do not overgeneralize from drafts, checklists, or stale notes.
 - Retain stable self-knowledge: preferences, project directions, household details, recurring obligations, relationship context, health/care constraints, locations, and long-lived plans.
 - Skip raw journal-like detail unless it clearly contains durable context Finn needs. Keep sensitive retained summaries narrow and factual.
-- If a note looks important but the excerpt is insufficient, use `get_note` before retaining.
+- If a note looks important but the excerpt is insufficient, use `getNote` before retaining.

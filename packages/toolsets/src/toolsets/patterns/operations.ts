@@ -1,5 +1,6 @@
 import type { PatternConnectorScope, PatternRecord, PatternSchedule, PatternTriggerConfig, PatternTriggerFilter, PatternWeekday } from "@finn/core";
 import type { PatternsRuntimeService } from "@finn/runtime";
+import { formatToolsetError } from "../../utils.js";
 import {
   patternsCreateInputSchema,
   patternsDeleteInputSchema,
@@ -504,7 +505,7 @@ export async function patternsCreateCommand(runtime: PatternsRuntimeService, inp
         ...(triggerConfig ? { triggerConfig } : {}),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatToolsetError(error);
       if (message.includes("Composio toolkit is not connected") && runtime.createComposioConnectionLink) {
         const authUrl = await runtime.createComposioConnectionLink(parsed.composio.toolkitSlug);
         return {
@@ -606,7 +607,7 @@ export async function patternsEditCommand(runtime: PatternsRuntimeService, input
         ...(triggerConfig ? { triggerConfig } : {}),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatToolsetError(error);
       if (message.includes("Composio toolkit is not connected") && runtime.createComposioConnectionLink) {
         const authUrl = await runtime.createComposioConnectionLink(parsed.composio.toolkitSlug);
         return {

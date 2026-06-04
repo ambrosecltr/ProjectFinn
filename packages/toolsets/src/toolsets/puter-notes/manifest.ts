@@ -28,7 +28,7 @@ export const puterNotesManifest: ToolsetManifest = {
         { purpose: "Page additional notes", code: "await finn.puter.notes.listNotes({ limit: 25, cursor: \"25\" })" },
       ],
       outputGuidance: [
-        "List results include metadata and excerpts, not necessarily full note bodies. Use get_note when the title/excerpt is relevant.",
+        "List results include metadata and excerpts, not necessarily full note bodies. Use getNote when the title/excerpt is relevant.",
       ],
     },
     {
@@ -45,7 +45,7 @@ export const puterNotesManifest: ToolsetManifest = {
         { purpose: "Page search results", code: "await finn.puter.notes.searchNotes({ query: \"house\", limit: 25, cursor: \"25\" })" },
       ],
       outputGuidance: [
-        "Use get_note before relying on a note when excerpts are insufficient or stale/ambiguous.",
+        "Use getNote before relying on a note when excerpts are insufficient or stale/ambiguous.",
       ],
     },
     {
@@ -66,14 +66,14 @@ export const puterNotesManifest: ToolsetManifest = {
   instructions: {
     overview: [
       "Use this read-only toolset to inspect Apple Notes from the user's paired Mac when live Puter access is available.",
-      "Start with list_notes for broad coverage or search_notes for a targeted topic, then get_note for full context.",
+      "Start with listNotes for broad coverage or searchNotes for a targeted topic, then getNote for full context.",
     ],
     referenceFormats: [
       "Note IDs/source IDs come from finn.puter.notes.listNotes or finn.puter.notes.searchNotes and are passed as noteId.",
       "Use ISO timestamps with modifiedAfter.",
     ],
     syntaxRules: [
-      "Batch independent reads only. Do not batch get_note when it depends on a note ID from a previous command.",
+      "Batch independent reads only. Do not batch getNote when it depends on a note ID from a previous command.",
       "When nextCursor is present, repeat the same list/search API call with cursor to continue.",
     ],
     safetyRules: [

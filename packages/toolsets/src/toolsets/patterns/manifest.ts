@@ -44,6 +44,10 @@ export function createPatternsManifest(options: PatternsManifestOptions): Toolse
       examples: [
         { purpose: "Inspect a Pattern before editing", code: "await finn.patterns.inspect({ id: \"ptn_123\" })" },
       ],
+      outputGuidance: [
+        "Use the returned Pattern record as the source of truth for trigger, schedule, connector scope, filters, notify policy, prompt, and nextRun.",
+        "If runtimeAccessWarning appears and the task needs connected services, edit the Pattern in place with connectorScope before reporting success.",
+      ],
     },
     {
       name: "create",
@@ -107,6 +111,9 @@ export function createPatternsManifest(options: PatternsManifestOptions): Toolse
       examples: [
         { purpose: "Pause one Pattern", code: "await finn.patterns.pause({ id: \"ptn_123\" })" },
       ],
+      outputGuidance: [
+        "Confirm the returned Pattern is inactive before reporting that it is paused.",
+      ],
     },
     {
       name: "resume",
@@ -119,6 +126,10 @@ export function createPatternsManifest(options: PatternsManifestOptions): Toolse
       examples: [
         { purpose: "Resume one Pattern", code: "await finn.patterns.resume({ id: \"ptn_123\" })" },
       ],
+      outputGuidance: [
+        "If the result returns an error about connector reconnection, report that setup is needed instead of claiming the Pattern resumed.",
+        "Use the returned active state and nextRun as the source of truth.",
+      ],
     },
     {
       name: "delete",
@@ -130,6 +141,10 @@ export function createPatternsManifest(options: PatternsManifestOptions): Toolse
       ],
       examples: [
         { purpose: "Delete one Pattern after confirmation/scope is clear", code: "await finn.patterns.delete({ id: \"ptn_123\" })" },
+      ],
+      outputGuidance: [
+        "Only report deletion when deleted is true for the requested id.",
+        "If deleted is false or an error is returned, explain the failure instead of assuming the Pattern is gone.",
       ],
     },
     {

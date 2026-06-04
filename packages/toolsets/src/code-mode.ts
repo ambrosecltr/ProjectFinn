@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CodeModeCommandSummary, ToolsetRuntime } from "./registry.js";
-import type { ToolsetEffect, ToolsetExecuteInput } from "./types.js";
+import type { ToolsetEffect, ToolsetExample, ToolsetExecuteInput } from "./types.js";
 
 export interface CodeModeCatalogEntry {
   apiName: string;
@@ -9,6 +9,9 @@ export interface CodeModeCatalogEntry {
   command: string;
   description: string;
   effects: ToolsetEffect[];
+  argumentGuidance: string[];
+  examples: ToolsetExample[];
+  outputGuidance: string[];
   inputTypeName: string;
   inputInterface: string;
   signature: string;
@@ -73,12 +76,11 @@ function unwrapSchema(schema: z.ZodType): z.ZodType {
     const definition = current._def as {
       innerType?: z.ZodType;
       schema?: z.ZodType;
-      type?: z.ZodType;
       out?: z.ZodType;
     };
     const next = current instanceof z.ZodEffects
       ? current.innerType()
-      : definition.innerType ?? definition.schema ?? definition.type ?? definition.out;
+      : definition.innerType ?? definition.schema ?? definition.out;
     if (!next || next === current) {
       return current;
     }
@@ -87,20 +89,24 @@ function unwrapSchema(schema: z.ZodType): z.ZodType {
   return current;
 }
 
-function unwrapFieldSchema(schema: z.ZodType): { schema: z.ZodType; optional: boolean } {
+function unwrapFieldSchema(schema: z.ZodType): { schema: z.ZodType; optional: boolean; nullable: boolean } {
   let current = schema;
   let optional = false;
+  let nullable = false;
   for (let depth = 0; depth < 8; depth += 1) {
-    if (current instanceof z.ZodOptional || current instanceof z.ZodDefault || current instanceof z.ZodNullable) {
+    if (current instanceof z.ZodOptional || current instanceof z.ZodDefault) {
       optional = true;
+    }
+    if (current instanceof z.ZodNullable) {
+      nullable = true;
     }
     const next = unwrapSchema(current);
     if (next === current) {
-      return { schema: current, optional };
+      return { schema: current, optional, nullable };
     }
     current = next;
   }
-  return { schema: current, optional };
+  return { schema: current, optional, nullable };
 }
 
 function schemaDescription(schema: z.ZodType): string | undefined {
@@ -113,6 +119,12 @@ function schemaDescription(schema: z.ZodType): string | undefined {
 
 function typeForSchema(schema: z.ZodType): string {
   const unwrapped = unwrapSchema(schema);
+  if (unwrapped instanceof z.ZodLiteral) {
+    return JSON.stringify(unwrapped.value);
+  }
+  if (unwrapped instanceof z.ZodNull) {
+    return "null";
+  }
   if (unwrapped instanceof z.ZodString) {
     return "string";
   }
@@ -125,13 +137,28 @@ function typeForSchema(schema: z.ZodType): string {
   if (unwrapped instanceof z.ZodEnum) {
     return unwrapped.options.map((option: string) => JSON.stringify(String(option))).join(" | ");
   }
+  if (unwrapped instanceof z.ZodUnion) {
+    return unwrapped.options.map((option: z.ZodType) => typeForSchema(option)).join(" | ");
+  }
+  if (unwrapped instanceof z.ZodDiscriminatedUnion) {
+    return [...unwrapped.options.values()].map((option: z.ZodObject<z.ZodRawShape>) => typeForSchema(option)).join(" | ");
+  }
+  if (unwrapped instanceof z.ZodNullable) {
+    return `${typeForSchema(unwrapped.unwrap())} | null`;
+  }
   if (unwrapped instanceof z.ZodArray) {
-    return `${typeForSchema(unwrapped.element)}[]`;
+    const itemType = typeForSchema(unwrapped.element);
+    const itemSchema = unwrapSchema(unwrapped.element);
+    const parenthesizeItem = itemSchema instanceof z.ZodEnum
+      || itemSchema instanceof z.ZodUnion
+      || itemSchema instanceof z.ZodDiscriminatedUnion;
+    return `${parenthesizeItem ? `(${itemType})` : itemType}[]`;
   }
   if (unwrapped instanceof z.ZodObject) {
     return "{ " + Object.entries(unwrapped.shape).map(([key, value]) => {
       const field = unwrapFieldSchema(value as z.ZodType);
-      return `${key}${field.optional ? "?" : ""}: ${typeForSchema(field.schema)}`;
+      const rendered = typeForSchema(field.schema);
+      return `${key}${field.optional ? "?" : ""}: ${field.nullable ? `${rendered} | null` : rendered}`;
     }).join("; ") + " }";
   }
   if (unwrapped instanceof z.ZodRecord) {
@@ -155,7 +182,7 @@ function renderInputInterface(typeName: string, schema: z.ZodType): string {
     const description = schemaDescription(fieldSchema);
     return [
       description ? `  /** ${description.replace(/\*\//g, "* /")} */` : null,
-      `  ${name}${field.optional ? "?" : ""}: ${typeForSchema(field.schema)};`,
+      `  ${name}${field.optional ? "?" : ""}: ${field.nullable ? `${typeForSchema(field.schema)} | null` : typeForSchema(field.schema)};`,
     ].filter((line): line is string => line !== null).join("\n");
   });
 
@@ -208,7 +235,9 @@ function createCatalogEntry(command: CodeModeCommandSummary): CodeModeCatalogEnt
     command.toolset,
     command.name,
     command.description,
-    command.effects.join(" "),
+    command.argumentGuidance.join("\n"),
+    (command.examples ?? []).map((example) => `${example.purpose}\n${example.code}`).join("\n"),
+    command.outputGuidance.join("\n"),
     inputInterface,
   ].join("\n").toLowerCase();
 
@@ -219,6 +248,9 @@ function createCatalogEntry(command: CodeModeCommandSummary): CodeModeCatalogEnt
     command: command.name,
     description: command.description,
     effects: command.effects,
+    argumentGuidance: command.argumentGuidance,
+    examples: command.examples ?? [],
+    outputGuidance: command.outputGuidance,
     inputTypeName,
     inputInterface,
     signature,
@@ -298,6 +330,29 @@ export function formatCodeModeSearchResults(
       "```ts",
       entry.inputInterface,
       "```",
+      ...renderGuidanceSection("Argument guidance", entry.argumentGuidance),
+      ...renderExamples(entry.examples),
+      ...renderGuidanceSection("Output guidance", entry.outputGuidance),
     ].join("\n")),
   ].join("\n\n");
+}
+
+function renderGuidanceSection(title: string, lines: readonly string[]): string[] {
+  if (lines.length === 0) {
+    return [];
+  }
+  return [
+    title + ":",
+    ...lines.map((line) => `- ${line}`),
+  ];
+}
+
+function renderExamples(examples: readonly ToolsetExample[]): string[] {
+  if (examples.length === 0) {
+    return [];
+  }
+  return [
+    "Examples:",
+    ...examples.map((example) => `- ${example.purpose}: \`${example.code}\``),
+  ];
 }

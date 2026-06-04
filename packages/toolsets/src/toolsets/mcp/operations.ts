@@ -1,4 +1,5 @@
 import type { McpRuntimeService } from "@finn/runtime";
+import { formatToolsetError } from "../../utils.js";
 import {
   mcpCallInputSchema,
   mcpReadResourceInputSchema,
@@ -8,10 +9,6 @@ import {
 } from "./schemas.js";
 
 const defaultResourceLimit = 25;
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown error";
-}
 
 function capResources(resources: Awaited<ReturnType<McpRuntimeService["listResources"]>>, limit: McpResourcesInput["limit"]) {
   const capped = resources.slice(0, limit ?? defaultResourceLimit);
@@ -32,7 +29,7 @@ export async function mcpSearchCommand(runtime: McpRuntimeService, input: unknow
     const tools = await runtime.searchTools(parsed);
     return { tools };
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 
@@ -42,7 +39,7 @@ export async function mcpResourcesCommand(runtime: McpRuntimeService, input: unk
     const resources = await runtime.listResources({ server: parsed.server });
     return capResources(resources, parsed.limit);
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 
@@ -51,7 +48,7 @@ export async function mcpReadResourceCommand(runtime: McpRuntimeService, input: 
   try {
     return await runtime.readResource(parsed);
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 
@@ -60,7 +57,7 @@ export async function mcpCallCommand(runtime: McpRuntimeService, input: unknown)
   try {
     return await runtime.callTool(parsed);
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 

@@ -1,9 +1,6 @@
 import type { WebContent, WebRuntimeService } from "@finn/runtime";
+import { formatToolsetError } from "../../utils.js";
 import { webFetchInputSchema, webSearchInputSchema, type WebFetchInput } from "./schemas.js";
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown error";
-}
 
 function formatContentsForMode(contents: WebContent[], mode: WebFetchInput["mode"]): WebContent[] {
   if (mode === "text") {
@@ -28,7 +25,7 @@ export async function webSearchCommand(runtime: WebRuntimeService, input: unknow
     });
     return { results };
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 
@@ -43,7 +40,7 @@ export async function webFetchCommand(runtime: WebRuntimeService, input: unknown
       contents: formatContentsForMode(contents, parsed.mode),
     };
   } catch (error) {
-    return { error: getErrorMessage(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 

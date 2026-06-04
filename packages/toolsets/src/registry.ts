@@ -34,8 +34,12 @@ export type ToolsetInputFieldType =
   | "string"
   | "number"
   | "boolean"
+  | "object"
+  | "unknown"
   | "string[]"
   | "number[]"
+  | "object[]"
+  | "unknown[]"
   | { enum: string[] };
 
 export interface ToolsetInputFieldSummary {
@@ -51,6 +55,9 @@ export interface CodeModeCommandSummary {
   description: string;
   effects: ToolsetEffect[];
   inputSchema: z.ZodType;
+  argumentGuidance: string[];
+  examples: ToolsetCommandDefinition["examples"];
+  outputGuidance: string[];
 }
 
 export interface CodeModeToolsetSummary {
@@ -179,6 +186,9 @@ export class ToolsetRuntime {
         description: command.description,
         effects: commandEffects(availableToolset.definition, command),
         inputSchema: command.inputSchema,
+        argumentGuidance: command.argumentGuidance ?? [],
+        examples: command.examples ?? [],
+        outputGuidance: command.outputGuidance ?? [],
       })),
     })).filter((toolset) => toolset.commands.length > 0);
   }
@@ -311,8 +321,8 @@ function summarizeEffects(definition: ToolsetDefinition, commands: ToolsetComman
 function renderToolsetInstructions(definition: ToolsetDefinition, commands: ToolsetCommandDefinition[]): string {
   const summary = summarizeToolset(definition, commands, { useEffectiveDescription: true });
   const commandSections = commands.map((command) => {
-    const flags = extractFlagSummaries(command.inputSchema).map((flag) => flag.name);
-    const fieldList = flags.length > 0 ? flags.join(", ") : "none";
+    const inputFields = extractFlagSummaries(command.inputSchema);
+    const fieldList = inputFields.length > 0 ? inputFields.map(formatInputFieldSummary).join(", ") : "none";
     const apiName = `finn.${definition.manifest.slug}.${apiCommandName(command.name)}`;
 
     return [
@@ -371,6 +381,11 @@ function renderExampleSection(examples: ToolsetCommandDefinition["examples"]): s
   ];
 }
 
+function formatInputFieldSummary(field: ToolsetInputFieldSummary): string {
+  const type = typeof field.type === "string" ? field.type : field.type.enum.map((value) => JSON.stringify(value)).join(" | ");
+  return `${field.name}${field.required ? "" : "?"}: ${type}`;
+}
+
 function extractFlagSummaries(schema: z.ZodType): ToolsetInputFieldSummary[] {
   const objectSchema = unwrapSchema(schema);
   if (!(objectSchema instanceof z.ZodObject)) {
@@ -410,11 +425,10 @@ function getWrappedSchema(schema: z.ZodType): z.ZodType | null {
   const definition = schema._def as {
     innerType?: z.ZodType;
     schema?: z.ZodType;
-    type?: z.ZodType;
     out?: z.ZodType;
   };
 
-  return definition.innerType ?? definition.schema ?? definition.type ?? definition.out ?? null;
+  return definition.innerType ?? definition.schema ?? definition.out ?? null;
 }
 
 function unwrapFieldSchema(schema: z.ZodType): { schema: z.ZodType; optional: boolean } {
@@ -451,7 +465,22 @@ function schemaFlagType(schema: z.ZodType): ToolsetInputFieldType {
   }
   if (schema instanceof z.ZodArray) {
     const item = unwrapFieldSchema(schema.element).schema;
-    return item instanceof z.ZodNumber ? "number[]" : "string[]";
+    if (item instanceof z.ZodNumber) {
+      return "number[]";
+    }
+    if (item instanceof z.ZodObject) {
+      return "object[]";
+    }
+    if (item instanceof z.ZodString || item instanceof z.ZodEnum || item instanceof z.ZodLiteral) {
+      return "string[]";
+    }
+    return "unknown[]";
+  }
+  if (schema instanceof z.ZodObject || schema instanceof z.ZodRecord || schema instanceof z.ZodUnion || schema instanceof z.ZodDiscriminatedUnion) {
+    return "object";
+  }
+  if (schema instanceof z.ZodUnknown || schema instanceof z.ZodAny) {
+    return "unknown";
   }
   return "string";
 }

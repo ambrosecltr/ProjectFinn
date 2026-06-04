@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
+import { formatToolsetError } from "../../utils.js";
 import {
   skillsInstallInputSchema,
   skillsLoadInputSchema,
@@ -453,7 +454,7 @@ export async function skillsReadResourceCommand(runtime: SkillsToolsetRuntime, i
     const { content, truncated } = truncateContent(buffer.toString("utf8"), MAX_SKILL_RESOURCE_CHARS);
     return { skill: skill.name, path: normalizeResourcePath(path), content, truncated };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    return { error: formatToolsetError(error) };
   }
 }
 
