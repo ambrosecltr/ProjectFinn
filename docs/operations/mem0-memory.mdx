@@ -1,0 +1,57 @@
+---
+title: "Mem0 Memory Operations"
+description: "How Finn uses Mem0 Cloud as a temporal, hybrid-search memory provider."
+---
+
+Finn can use Mem0 Cloud as the selected external memory provider with `MEMORY_PROVIDER=mem0`.
+
+## Configuration
+
+| Variable | Purpose |
+|---|---|
+| `MEMORY_PROVIDER=mem0` | selects Mem0 as Finn's external memory provider |
+| `MEM0_API_KEY` | Mem0 Cloud API key |
+| `MEM0_BASE_URL` | optional Mem0 API host override; defaults to the SDK's Cloud endpoint |
+
+This integration targets Mem0 Cloud through the official `mem0ai` TypeScript SDK. Self-hosted Mem0 REST uses a different endpoint/auth shape and is intentionally not wired by this provider yet.
+
+## Runtime Model
+
+Finn stores all user memory in one durable Mem0 user scope:
+
+```txt
+finn:<tenantId>:<userId>
+```
+
+Finn does not use Mem0 `agent_id`, `app_id`, or `run_id` for the default provider path. Finn-specific boundaries such as source toolkit, conversation, Pattern, account scope, and source IDs stay in metadata so Mem0 can still search one coherent user memory while Finn can filter provider-neutral tools precisely.
+
+## Temporal Retrieval
+
+Mem0 v3 temporal reasoning is used directly:
+
+- writes pass source timestamps to Mem0 when Finn has them
+- searches pass Finn's current query timestamp as Mem0's reference date
+- automatic context uses Mem0 hybrid retrieval without reranking for lower latency
+- explicit memory searches use Mem0 reranking for better precision
+
+Operational records such as Pattern lifecycle events and Pattern run outcomes are stored exactly and filtered out of automatic hot-path semantic context. They remain available to explicit memory search when scoped by metadata.
+
+## Profile And Reflection
+
+Mem0 does not currently expose Finn profile context or reflection tools. Finn still writes the narrow `user_profile_seed` memory document so Mem0 knows explicit profile facts such as name, home/base location, and user-confirmed/browser timezone, but the hot path does not receive a Mem0-backed `<memory_profile>` envelope.
+
+## Backfill
+
+Mem0 participates in the provider-neutral backfill script:
+
+```bash
+bun run memory:backfill --provider mem0 --kind all
+```
+
+or:
+
+```bash
+bun run mem0:backfill
+```
+
+The backfill is dry-run by default. Add `--execute` to write documents. Mem0 does not accept Finn's stable `customId` directly, so Finn stores it as `metadata.finnCustomId` and checks for an existing matching memory before backfill writes.

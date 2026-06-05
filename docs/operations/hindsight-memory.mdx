@@ -27,6 +27,8 @@ Only one external memory provider can be active at a time:
 | `MEMORY_PROVIDER=none` | disables external memory |
 | `MEMORY_PROVIDER=supermemory` | uses Supermemory and requires `SUPERMEMORY_API_KEY` |
 | `MEMORY_PROVIDER=hindsight` | uses Hindsight and requires `HINDSIGHT_BASE_URL` |
+| `MEMORY_PROVIDER=honcho` | uses Honcho and requires `HONCHO_API_KEY` or `HONCHO_BASE_URL` |
+| `MEMORY_PROVIDER=mem0` | uses Mem0 Cloud and requires `MEM0_API_KEY` |
 
 `MEMORY_MODE` controls hot-path recall behavior. `hybrid` uses fast Hindsight recall to inject compact relevant facts and still exposes memory tools, `context` injects compact recall without tools, and `tools` exposes tools without automatic injection. Auto recall does not use Hindsight reflect.
 

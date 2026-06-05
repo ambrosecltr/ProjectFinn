@@ -48,7 +48,7 @@ const contextConfigSchema = z.object({
 const llmProviderSchema = z.enum(["anthropic", "openai", "fireworks", "deepseek", "openai-compatible"]);
 const llmReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 const telemetryProviderSchema = z.enum(["none", "posthog"]);
-const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight", "honcho"]);
+const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight", "honcho", "mem0"]);
 const memoryModeSchema = z.enum(["hybrid", "context", "tools"]);
 const memoryConfigSchema = z.object({
   provider: memoryProviderSchema,
@@ -224,6 +224,7 @@ const configSchema = z.object({
       elevenlabs: z.boolean(),
       hindsight: z.boolean(),
       honcho: z.boolean(),
+      mem0: z.boolean(),
       supermemory: z.boolean(),
     }),
     media: z.object({
@@ -339,6 +340,12 @@ const configSchema = z.object({
           timeoutMs: z.number().int().positive().optional(),
         })
         .optional(),
+      mem0: z
+        .object({
+          apiKey: z.string().optional(),
+          baseUrl: z.string().url().optional(),
+        })
+        .optional(),
     })
     .optional(),
 
@@ -391,6 +398,14 @@ const configSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["memory", "provider"],
       message: "MEMORY_PROVIDER=honcho requires HONCHO_API_KEY or HONCHO_BASE_URL.",
+    });
+  }
+
+  if (config.memory.provider === "mem0" && !config.integrations?.mem0?.apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["memory", "provider"],
+      message: "MEMORY_PROVIDER=mem0 requires MEM0_API_KEY.",
     });
   }
 });
@@ -523,6 +538,7 @@ export function resolveMemoryProvider(input: {
     ...(input.integrations.supermemory?.apiKey ? ["supermemory" as const] : []),
     ...(isHindsightConfigured(input.integrations) ? ["hindsight" as const] : []),
     ...(isHonchoConfigured(input.integrations) ? ["honcho" as const] : []),
+    ...(input.integrations.mem0?.apiKey ? ["mem0" as const] : []),
   ];
 
   if (configuredProviders.length > 1) {
@@ -546,11 +562,13 @@ export function buildCapabilities(raw: {
   const hasSupermemory = Boolean(raw.integrations.supermemory?.apiKey);
   const hasHindsight = isHindsightConfigured(raw.integrations);
   const hasHoncho = isHonchoConfigured(raw.integrations);
+  const hasMem0 = Boolean(raw.integrations.mem0?.apiKey);
   const memoryProvider = raw.memoryProvider ?? resolveMemoryProvider({ integrations: raw.integrations });
   const memoryMode = raw.memoryMode ?? "tools";
   const hasMemory = (memoryProvider === "supermemory" && hasSupermemory)
     || (memoryProvider === "hindsight" && hasHindsight)
-    || (memoryProvider === "honcho" && hasHoncho);
+    || (memoryProvider === "honcho" && hasHoncho)
+    || (memoryProvider === "mem0" && hasMem0);
   const hasHotPathMemoryTools = hasMemory && memoryMode !== "context";
   const hasMemoryReflect = (memoryProvider === "hindsight" && hasHindsight)
     || (memoryProvider === "honcho" && hasHoncho);
@@ -580,6 +598,7 @@ export function buildCapabilities(raw: {
       elevenlabs: hasElevenlabs,
       hindsight: hasHindsight,
       honcho: hasHoncho,
+      mem0: hasMem0,
       supermemory: hasSupermemory,
     },
     media: {
@@ -690,6 +709,10 @@ export function loadConfig(): AppConfig {
       baseUrl: optionalEnv("HONCHO_BASE_URL"),
       workspacePrefix: optionalEnv("HONCHO_WORKSPACE_PREFIX"),
       timeoutMs: optionalEnv("HONCHO_TIMEOUT_MS") ? envInt("HONCHO_TIMEOUT_MS") : undefined,
+    },
+    mem0: {
+      apiKey: optionalEnv("MEM0_API_KEY"),
+      baseUrl: optionalEnv("MEM0_BASE_URL"),
     },
   };
   const memoryProvider = resolveMemoryProvider({

@@ -108,9 +108,9 @@ Composio must deliver events to:
 
 When a Pattern definition needs to change, Finn should usually edit the existing Pattern in place rather than delete and recreate it. Preserving the same Pattern row keeps `pattern_runs` continuity available for dedupe and stale-notification avoidance across schedule or trigger changes.
 
-When an external memory provider is active, successful Pattern lifecycle changes are emitted as provider-neutral activity feed events after create, edit, pause, resume, and delete actions from the hot path, Pattern management, or the web app. These events are user-scoped operational state, so Hindsight stores them in the user's main bank rather than the Pattern-specific bank. The memory subscriber is event-driven and fail-open; a provider retain failure must not block the Pattern mutation.
+When an external memory provider is active, successful Pattern lifecycle changes are emitted as provider-neutral activity feed events after create, edit, pause, resume, and delete actions from the hot path, Pattern management, or the web app. These events are user-scoped operational state and remain operational memory, not user personality. The memory subscriber is event-driven and fail-open; a provider retain failure must not block the Pattern mutation.
 
-When an external memory provider is active, recurring Pattern run outcomes are also recorded asynchronously after notify policy is applied. Supermemory stores these records in the user's single provider container with Pattern metadata filters. Hindsight stores them in an isolated Pattern bank for that Finn user and Pattern. Both providers retain metadata such as `kind: pattern_run_outcome`, `patternId`, `patternRunId`, `notified`, and `surfaced`. One-shot scheduled Pattern outcomes are not stored as Pattern continuity memory.
+When an external memory provider is active, recurring Pattern run outcomes are also recorded asynchronously after notify policy is applied. Providers either isolate Pattern outcomes natively or retain them in the user's provider scope with strict Pattern metadata filters. All providers retain metadata such as `kind: pattern_run_outcome`, `patternId`, `patternRunId`, `notified`, and `surfaced`. One-shot scheduled Pattern outcomes are not stored as Pattern continuity memory.
 
 ## Important Safety Behavior
 

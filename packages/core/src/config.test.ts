@@ -30,6 +30,8 @@ function setRequiredEnv(overrides: Record<string, string | undefined> = {}): voi
     HONCHO_BASE_URL: undefined,
     HONCHO_WORKSPACE_PREFIX: undefined,
     HONCHO_TIMEOUT_MS: undefined,
+    MEM0_API_KEY: undefined,
+    MEM0_BASE_URL: undefined,
     SPECTRUM_PROJECT_ID: "spectrum-project",
     SPECTRUM_PROJECT_SECRET: "spectrum-secret",
     PUBLIC_URL: "https://finn.example.com",
@@ -96,6 +98,7 @@ describe("buildCapabilities", () => {
     expect(capabilities.integrations.memory).toBe(false);
     expect(capabilities.integrations.supermemory).toBe(false);
     expect(capabilities.integrations.honcho).toBe(false);
+    expect(capabilities.integrations.mem0).toBe(false);
     expect(capabilities.tools.hotPath.search_memory).toBe(false);
     expect(capabilities.tools.hotPath.reflect_memory).toBe(false);
     expect(capabilities.tools.hotPath.files).toBe(true);
@@ -143,6 +146,21 @@ describe("buildCapabilities", () => {
     expect(capabilities.tools.hotPath.reflect_memory).toBe(true);
     expect(capabilities.tools.worker.memory).toBe(true);
     expect(capabilities.tools.worker.memory_reflect).toBe(true);
+  });
+
+  it("enables memory search and storage capabilities when Mem0 is selected", () => {
+    const capabilities = buildCapabilities({
+      models,
+      integrations: { mem0: { apiKey: "test" } },
+      memoryMode: "tools",
+    });
+
+    expect(capabilities.integrations.memory).toBe(true);
+    expect(capabilities.integrations.mem0).toBe(true);
+    expect(capabilities.tools.hotPath.search_memory).toBe(true);
+    expect(capabilities.tools.hotPath.reflect_memory).toBe(false);
+    expect(capabilities.tools.worker.memory).toBe(true);
+    expect(capabilities.tools.worker.memory_reflect).toBe(false);
   });
 
   it("does not enable Hindsight memory capabilities from API key without base URL", () => {
@@ -565,6 +583,7 @@ describe("resolveMemoryProvider", () => {
   it("defaults to Honcho when only Honcho is configured", () => {
     expect(resolveMemoryProvider({ integrations: { honcho: { apiKey: "test" } } })).toBe("honcho");
     expect(resolveMemoryProvider({ integrations: { honcho: { baseUrl: "https://honcho.example.com" } } })).toBe("honcho");
+    expect(resolveMemoryProvider({ integrations: { mem0: { apiKey: "test" } } })).toBe("mem0");
   });
 
   it("requires an explicit provider when multiple memory providers are configured", () => {
@@ -581,6 +600,7 @@ describe("resolveMemoryProvider", () => {
     expect(resolveMemoryProvider({ requested: "supermemory", integrations: { supermemory: { apiKey: "test" } } })).toBe("supermemory");
     expect(resolveMemoryProvider({ requested: "hindsight", integrations: { hindsight: { baseUrl: "https://hindsight.example.com" } } })).toBe("hindsight");
     expect(resolveMemoryProvider({ requested: "honcho", integrations: { honcho: { apiKey: "test" } } })).toBe("honcho");
+    expect(resolveMemoryProvider({ requested: "mem0", integrations: { mem0: { apiKey: "test" } } })).toBe("mem0");
   });
 
   it("does not infer Hindsight from API key without base URL", () => {
@@ -611,6 +631,12 @@ describe("loadConfig memory provider validation", () => {
     setRequiredEnv({ MEMORY_PROVIDER: "honcho", HONCHO_API_KEY: undefined, HONCHO_BASE_URL: undefined });
 
     expect(() => loadConfig()).toThrow("MEMORY_PROVIDER=honcho requires HONCHO_API_KEY or HONCHO_BASE_URL");
+  });
+
+  it("rejects Mem0 provider selection without a Mem0 API key", () => {
+    setRequiredEnv({ MEMORY_PROVIDER: "mem0", MEM0_API_KEY: undefined });
+
+    expect(() => loadConfig()).toThrow("MEMORY_PROVIDER=mem0 requires MEM0_API_KEY");
   });
 
   it("rejects multiple configured memory providers without explicit selection", () => {

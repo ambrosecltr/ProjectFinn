@@ -60,7 +60,7 @@ export async function syncUserProfileSeedToMemory(input: {
     return { synced: false, reason: "memory_unavailable" };
   }
 
-  if (memory.provider !== "supermemory" && memory.provider !== "hindsight" && memory.provider !== "honcho") {
+  if (memory.provider !== "supermemory" && memory.provider !== "hindsight" && memory.provider !== "honcho" && memory.provider !== "mem0") {
     return { synced: false, reason: "unsupported_provider" };
   }
 

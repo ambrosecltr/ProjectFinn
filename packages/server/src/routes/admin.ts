@@ -107,6 +107,10 @@ export function buildMemoryProviderStatus(config: AppConfig) {
       configured: Boolean(config.integrations?.honcho?.apiKey || config.integrations?.honcho?.baseUrl),
       selected: config.memory.provider === "honcho",
     },
+    mem0: {
+      configured: Boolean(config.integrations?.mem0?.apiKey),
+      selected: config.memory.provider === "mem0",
+    },
   };
   const selectedProvider = config.memory.provider;
   const selectedProviderStatus = selectedProvider === "none" ? null : providers[selectedProvider];

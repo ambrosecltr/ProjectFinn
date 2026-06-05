@@ -1,11 +1,11 @@
 import { createLogger, loadConfig, type AppConfig, type MemoryProvider } from "@finn/core";
 import { getDb, getDbClient } from "@finn/db";
-import { HindsightClient, HonchoClient, SupermemoryClient, getSafeMemoryFailureReason, type MemoryClient } from "@finn/integrations";
+import { HindsightClient, HonchoClient, Mem0Client, SupermemoryClient, getSafeMemoryFailureReason, type MemoryClient } from "@finn/integrations";
 import { runMemoryBackfill, type MemoryBackfillKind, type MemoryBackfillOptions } from "../memory-backfill.js";
 
 const logger = createLogger("memory-backfill");
 const validKinds = ["hot_path_turn", "pattern_run_outcome", "user_profile_seed"] as const satisfies readonly MemoryBackfillKind[];
-const validProviders = ["supermemory", "hindsight", "honcho"] as const satisfies readonly Exclude<MemoryProvider, "none">[];
+const validProviders = ["supermemory", "hindsight", "honcho", "mem0"] as const satisfies readonly Exclude<MemoryProvider, "none">[];
 
 interface CliOptions {
   execute: boolean;
@@ -26,7 +26,7 @@ function printUsage(command = "memory:backfill"): void {
     "",
     "options:",
     "  --execute                 write documents instead of planning only",
-    "  --provider <provider>     supermemory, hindsight, or honcho (default: MEMORY_PROVIDER)",
+    "  --provider <provider>     supermemory, hindsight, honcho, or mem0 (default: MEMORY_PROVIDER)",
     "  --kind <kind>             hot_path_turn, pattern_run_outcome, user_profile_seed, or all (default: all)",
     "  --tenant-id <tenant_id>   restrict to one tenant",
     "  --user-id <user_id>       restrict to one user",
@@ -164,13 +164,23 @@ function createMemoryClientForProvider(config: AppConfig, provider: Exclude<Memo
         workspacePrefix: honcho.workspacePrefix,
       });
     }
+    case "mem0": {
+      const mem0 = config.integrations?.mem0;
+      if (!mem0?.apiKey) {
+        throw new Error("MEM0_API_KEY is required for --provider mem0.");
+      }
+      return new Mem0Client({
+        apiKey: mem0.apiKey,
+        baseUrl: mem0.baseUrl,
+      });
+    }
   }
 }
 
 function resolveProvider(config: AppConfig, cliProvider?: Exclude<MemoryProvider, "none">): Exclude<MemoryProvider, "none"> {
   const provider = cliProvider ?? config.memory.provider;
   if (provider === "none") {
-    throw new Error("No memory provider selected. Set MEMORY_PROVIDER or pass --provider supermemory|hindsight|honcho.");
+    throw new Error("No memory provider selected. Set MEMORY_PROVIDER or pass --provider supermemory|hindsight|honcho|mem0.");
   }
   return provider;
 }

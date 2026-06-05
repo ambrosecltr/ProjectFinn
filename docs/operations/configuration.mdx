@@ -133,7 +133,7 @@ Runtime gating is intentionally one-directional: missing optional configuration 
 | `COMPOSIO_API_KEY` | unset | worker external-service tools and connector-backed Patterns |
 | `DEEPGRAM_API_KEY` | unset | inbound audio transcription |
 | `ELEVENLABS_API_KEY` | unset | hot-path voice replies |
-| `MEMORY_PROVIDER` | inferred from configured provider, otherwise `none` | selected optional memory provider: `none`, `supermemory`, `hindsight`, or `honcho` |
+| `MEMORY_PROVIDER` | inferred from configured provider, otherwise `none` | selected optional memory provider: `none`, `supermemory`, `hindsight`, `honcho`, or `mem0` |
 | `MEMORY_MODE` | `tools` | hot-path memory behavior: `hybrid`, `context`, or `tools` |
 | `MEMORY_AUTO_RECALL_TIMEOUT_MS` | `3000` | fail-open timeout for hot-path auto-recall (hybrid/context modes) |
 | `MEMORY_AUTO_RECALL_MAX_RESULTS` | `8` | max auto-recall results injected into hot-path context |
@@ -146,6 +146,8 @@ Runtime gating is intentionally one-directional: missing optional configuration 
 | `HONCHO_BASE_URL` | unset | optional Honcho API base URL for self-hosted Honcho |
 | `HONCHO_WORKSPACE_PREFIX` | `finn` | optional prefix for Finn-created per-user Honcho workspace IDs |
 | `HONCHO_TIMEOUT_MS` | `30000` | Honcho SDK request timeout; keeps provider calls below the SDK's 60s default |
+| `MEM0_API_KEY` | unset | Mem0 Cloud API key |
+| `MEM0_BASE_URL` | `https://api.mem0.ai` | optional Mem0 API host override |
 
 External memory providers are deliberately separate from Finn's Postgres-backed profile, conversation, and compaction systems. Exactly one memory provider can be active at a time. Provider errors are logged and fail open.
 
@@ -155,6 +157,7 @@ Selection behavior:
 - `MEMORY_PROVIDER=supermemory` requires `SUPERMEMORY_API_KEY`.
 - `MEMORY_PROVIDER=hindsight` requires `HINDSIGHT_BASE_URL`; `HINDSIGHT_API_KEY` is optional so local unauthenticated Hindsight deployments can work.
 - `MEMORY_PROVIDER=honcho` requires `HONCHO_API_KEY` for managed Honcho or `HONCHO_BASE_URL` for self-hosted Honcho.
+- `MEMORY_PROVIDER=mem0` requires `MEM0_API_KEY`.
 - if one provider is configured and `MEMORY_PROVIDER` is unset, Finn infers that provider.
 - if multiple providers are configured and `MEMORY_PROVIDER` is unset, startup fails.
 

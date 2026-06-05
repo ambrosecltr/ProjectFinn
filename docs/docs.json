@@ -152,6 +152,7 @@
               "operations/configuration",
               "operations/hindsight-memory",
               "operations/honcho-memory",
+              "operations/mem0-memory",
               "operations/deployment"
             ]
           }

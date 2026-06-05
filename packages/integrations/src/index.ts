@@ -63,6 +63,15 @@ export type {
   HonchoSearchResponse,
   HonchoSearchResult,
 } from "./honcho.js";
+export { Mem0Client, buildMem0Filters, buildMem0UserId, getMem0FailureReason } from "./mem0.js";
+export type {
+  Mem0AddDocumentInput,
+  Mem0ClientOptions,
+  Mem0Metadata,
+  Mem0SearchInput,
+  Mem0SearchResponse,
+  Mem0SearchResult,
+} from "./mem0.js";
 export {
   MemoryRecorder,
   buildActivityFeedMemoryDocument,

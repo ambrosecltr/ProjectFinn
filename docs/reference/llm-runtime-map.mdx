@@ -296,7 +296,7 @@ Important derived booleans are:
 - Exa API key enables the worker Finn JS workspace `web` API.
 - Fal API key enables the worker Finn JS workspace `creative` API.
 - Composio API key enables worker Composio runtime tools.
-- selected memory provider configuration enables worker user/Pattern memory search and asynchronous handled-turn/Pattern outcome storage. `MEMORY_MODE=hybrid|tools` may also expose hot-path `search_memory`, and providers that implement memory reflection, currently Hindsight and Honcho, may expose `reflect_memory` in those modes. `MEMORY_MODE=context` hides hot-path memory tools and relies on compact auto-recall injection instead.
+- selected memory provider configuration enables worker user/Pattern memory search and asynchronous handled-turn/Pattern outcome storage. `MEMORY_MODE=hybrid|tools` may also expose hot-path `search_memory`, and providers that implement memory reflection, currently Hindsight and Honcho, may expose `reflect_memory` in those modes. Mem0 is search/context only. `MEMORY_MODE=context` hides hot-path memory tools and relies on compact auto-recall injection instead.
 - ElevenLabs API key enables text-to-speech capability.
 - Deepgram plus ElevenLabs together enable full voice round-trip capability.
 

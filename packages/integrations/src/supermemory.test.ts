@@ -4,6 +4,7 @@ import { APIError } from "supermemory";
 import { createIntegrationClients } from "./factory.js";
 import { HindsightClient } from "./hindsight.js";
 import { HonchoClient } from "./honcho.js";
+import { Mem0Client } from "./mem0.js";
 import { getSafeMemoryFailureReason } from "./memory.js";
 import { buildSupermemoryFilters, getSupermemoryFailureReason, SupermemoryClient } from "./supermemory.js";
 
@@ -404,6 +405,15 @@ describe("createIntegrationClients", () => {
     } as never).memory).toBeInstanceOf(HonchoClient);
     expect(createIntegrationClients({
       memory: { provider: "honcho" },
+      integrations: {},
+    } as never).memory).toBeUndefined();
+    globalThis.fetch = mock(async () => jsonResponse({ status: "ok" })) as unknown as typeof fetch;
+    expect(createIntegrationClients({
+      memory: { provider: "mem0" },
+      integrations: { mem0: { apiKey: "test" } },
+    } as never).memory).toBeInstanceOf(Mem0Client);
+    expect(createIntegrationClients({
+      memory: { provider: "mem0" },
       integrations: {},
     } as never).memory).toBeUndefined();
   });

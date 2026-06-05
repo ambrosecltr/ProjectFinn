@@ -173,6 +173,32 @@ describe("syncUserProfileSeedToMemory", () => {
     });
   });
 
+  it("writes a Mem0 core profile seed", async () => {
+    const memory = createMemoryClient("mem0");
+    const { db, updates } = createDb();
+
+    const result = await syncUserProfileSeedToMemory({
+      db,
+      memory,
+      storedUser: createStoredUser(),
+      user,
+      now: new Date("2026-05-31T05:00:00.000Z"),
+    });
+
+    expect(result.synced).toBe(true);
+    expect(memory.addDocument).toHaveBeenCalledWith(expect.objectContaining({
+      customId: "user-profile-seed",
+      content: expect.stringContaining("Timezone: Australia/Brisbane"),
+    }));
+    expect(updates[0]?.metadata).toMatchObject({
+      profile: {
+        memoryProfileSeed: {
+          provider: "mem0",
+        },
+      },
+    });
+  });
+
   it("skips unsupported providers", async () => {
     const memory = createMemoryClient("none");
     const { db, updates } = createDb();

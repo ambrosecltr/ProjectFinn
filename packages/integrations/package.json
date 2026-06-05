@@ -10,6 +10,7 @@
     "@finn/core": "workspace:*",
     "@honcho-ai/sdk": "^2.1.2",
     "exa-js": "^2.12.1",
+    "mem0ai": "^3.0.6",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3"
   }

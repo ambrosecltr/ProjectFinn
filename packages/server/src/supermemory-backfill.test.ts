@@ -57,9 +57,9 @@ function createDb(...responses: unknown[][]) {
   } as never;
 }
 
-function createMemoryClient(): MemoryClient {
+function createMemoryClient(provider = "test"): MemoryClient {
   return {
-    provider: "test",
+    provider,
     addDocument: mock(async () => ({ id: "doc_123", status: "queued" })),
     searchDocuments: mock(async () => ({ ok: true as const, results: [] })),
     buildHotPathTurnCustomId: (messageId) => `hot-path-turn_${messageId}`,
@@ -389,7 +389,7 @@ describe("memory backfill planning", () => {
     expect(plan.documents[0]?.content).toContain("Timezone: Australia/Brisbane");
   });
 
-  it("does not plan profile seeds for non-Supermemory providers", async () => {
+  it("does not plan profile seeds for providers without profile seed backfill support", async () => {
     const db = createDb([{ user: { ...user, timezone: "Australia/Brisbane" } }]);
 
     const plan = await planMemoryBackfill({
@@ -403,6 +403,24 @@ describe("memory backfill planning", () => {
     expect(plan.scanned).toBe(0);
     expect(plan.documents).toEqual([]);
     expect(plan.skipped).toEqual({ user_profile_seed_unsupported_provider: 1 });
+  });
+
+  it("plans existing user profile seeds for Mem0", async () => {
+    const db = createDb([{ user: { ...user, timezone: "Australia/Brisbane" } }]);
+
+    const plan = await planMemoryBackfill({
+      db,
+      client: createMemoryClient("mem0"),
+      options: createOptions(["user_profile_seed"], {
+        defaultTimezone: "UTC",
+      }),
+    });
+
+    expect(plan.scanned).toBe(1);
+    expect(plan.skipped).toEqual({});
+    expect(plan.documents).toHaveLength(1);
+    expect(plan.documents[0]?.kind).toBe("user_profile_seed");
+    expect(plan.documents[0]?.customId).toBe("user-profile-seed");
   });
 
   it("plans worker-origin visible assistant deliveries as separate session appends", async () => {

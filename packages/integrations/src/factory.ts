@@ -5,6 +5,7 @@ import { ExaClient } from "./exa.js";
 import { FalClient } from "./fal.js";
 import { HindsightClient } from "./hindsight.js";
 import { HonchoClient } from "./honcho.js";
+import { Mem0Client } from "./mem0.js";
 import { SupermemoryClient } from "./supermemory.js";
 import type { IntegrationClients } from "./types.js";
 
@@ -71,6 +72,12 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
     unconfigured.push("honcho");
   }
 
+  if (integrations.mem0?.apiKey) {
+    configured.push("mem0");
+  } else {
+    unconfigured.push("mem0");
+  }
+
   switch (config.memory.provider) {
     case "none":
       unconfigured.push("memory");
@@ -109,6 +116,17 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
         configured.push("memory:honcho");
       } else {
         unconfigured.push("memory:honcho");
+      }
+      break;
+    case "mem0":
+      if (integrations.mem0?.apiKey) {
+        clients.memory = new Mem0Client({
+          apiKey: integrations.mem0.apiKey,
+          baseUrl: integrations.mem0.baseUrl,
+        });
+        configured.push("memory:mem0");
+      } else {
+        unconfigured.push("memory:mem0");
       }
       break;
   }

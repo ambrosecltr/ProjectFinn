@@ -37,6 +37,7 @@
     "security:sandbox": "TELEMETRY_PROVIDER=none bun run packages/server/src/security-sandbox/cli.ts",
     "security:sandbox:corpus": "TELEMETRY_PROVIDER=none bun run packages/server/src/security-sandbox/cli.ts --corpus --all-profiles",
     "memory:backfill": "bun run packages/server/src/scripts/memory-backfill.ts",
+    "mem0:backfill": "bun run packages/server/src/scripts/memory-backfill.ts --provider mem0",
     "supermemory:backfill": "bun run packages/server/src/scripts/memory-backfill.ts --provider supermemory"
   },
   "dependencies": {
@@ -68,6 +69,7 @@
     "graphile-worker": "^0.16.6",
     "hono": "^4",
     "mammoth": "^1.12.0",
+    "mem0ai": "^3.0.6",
     "nanoid": "^5",
     "pino": "^9",
     "pino-pretty": "^13",

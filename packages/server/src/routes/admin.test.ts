@@ -29,7 +29,15 @@ function createConfig(capabilities: AppConfig["capabilities"], overrides: Partia
     },
     capabilities,
     memory: overrides.memory ?? {
-      provider: capabilities.integrations.honcho ? "honcho" : capabilities.integrations.hindsight ? "hindsight" : capabilities.integrations.supermemory ? "supermemory" : "none",
+      provider: capabilities.integrations.mem0
+        ? "mem0"
+        : capabilities.integrations.honcho
+          ? "honcho"
+          : capabilities.integrations.hindsight
+            ? "hindsight"
+            : capabilities.integrations.supermemory
+              ? "supermemory"
+              : "none",
       mode: "tools",
       autoRecallTimeoutMs: 3_000,
       autoRecallMaxResults: 8,
@@ -118,6 +126,7 @@ function createCapabilities(overrides: {
   elevenlabs?: boolean;
   hindsight?: boolean;
   honcho?: boolean;
+  mem0?: boolean;
   supermemory?: boolean;
 } = {}): AppConfig["capabilities"] {
   const exa = overrides.exa ?? false;
@@ -127,8 +136,9 @@ function createCapabilities(overrides: {
   const elevenlabs = overrides.elevenlabs ?? false;
   const hindsight = overrides.hindsight ?? false;
   const honcho = overrides.honcho ?? false;
+  const mem0 = overrides.mem0 ?? false;
   const supermemory = overrides.supermemory ?? false;
-  const memory = supermemory || hindsight || honcho;
+  const memory = supermemory || hindsight || honcho || mem0;
   const memoryReflect = hindsight || honcho;
 
   return {
@@ -156,6 +166,7 @@ function createCapabilities(overrides: {
       elevenlabs,
       hindsight,
       honcho,
+      mem0,
       supermemory,
     },
     media: {
@@ -197,7 +208,7 @@ describe("buildRuntimeGatingStatus", () => {
   it("surfaces disabled optional integrations and worker tool families", () => {
     const status = buildRuntimeGatingStatus(createConfig(createCapabilities()));
 
-    expect(status.integrations.disabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "hindsight", "honcho", "memory", "supermemory"]);
+    expect(status.integrations.disabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "hindsight", "honcho", "mem0", "memory", "supermemory"]);
     expect(status.media.enabled).toEqual(["fileStorage"]);
     expect(status.media.disabled).toEqual(["speechToText", "textToSpeech", "voiceRoundTrip"]);
     expect(status.configuredToolFamilies.worker.disabled).toEqual([
@@ -251,6 +262,16 @@ describe("buildRuntimeGatingStatus", () => {
     expect(status.configuredToolFamilies.worker.enabled).toContain("memory");
     expect(status.configuredToolFamilies.worker.enabled).toContain("memory_reflect");
   });
+
+  it("surfaces Mem0-backed memory as search-only", () => {
+    const status = buildRuntimeGatingStatus(createConfig(createCapabilities({ mem0: true })));
+
+    expect(status.integrations.enabled).toEqual(["mem0", "memory"]);
+    expect(status.configuredToolFamilies.hotPath.enabled).toContain("search_memory");
+    expect(status.configuredToolFamilies.hotPath.disabled).toContain("reflect_memory");
+    expect(status.configuredToolFamilies.worker.enabled).toContain("memory");
+    expect(status.configuredToolFamilies.worker.disabled).toContain("memory_reflect");
+  });
 });
 
 describe("buildMemoryProviderStatus", () => {
@@ -265,6 +286,7 @@ describe("buildMemoryProviderStatus", () => {
         supermemory: { configured: false, selected: false },
         hindsight: { configured: false, selected: false },
         honcho: { configured: false, selected: false },
+        mem0: { configured: false, selected: false },
       },
     });
   });
@@ -286,6 +308,7 @@ describe("buildMemoryProviderStatus", () => {
         supermemory: { configured: true, selected: true },
         hindsight: { configured: true, selected: false },
         honcho: { configured: false, selected: false },
+        mem0: { configured: false, selected: false },
       },
     });
   });
@@ -304,6 +327,7 @@ describe("buildMemoryProviderStatus", () => {
         supermemory: { configured: false, selected: false },
         hindsight: { configured: false, selected: true },
         honcho: { configured: false, selected: false },
+        mem0: { configured: false, selected: false },
       },
     });
   });
@@ -322,6 +346,26 @@ describe("buildMemoryProviderStatus", () => {
         supermemory: { configured: false, selected: false },
         hindsight: { configured: false, selected: false },
         honcho: { configured: true, selected: true },
+        mem0: { configured: false, selected: false },
+      },
+    });
+  });
+
+  it("shows selected Mem0 when an API key is configured", () => {
+    const status = buildMemoryProviderStatus(createConfig(createCapabilities({ mem0: true }), {
+      integrations: { mem0: { apiKey: "test" } },
+      memory: { provider: "mem0", mode: "tools", autoRecallTimeoutMs: 3_000, autoRecallMaxResults: 8, provisionMentalModels: true },
+    }));
+
+    expect(status).toEqual({
+      selectedProvider: "mem0",
+      mode: "tools",
+      configured: true,
+      providers: {
+        supermemory: { configured: false, selected: false },
+        hindsight: { configured: false, selected: false },
+        honcho: { configured: false, selected: false },
+        mem0: { configured: true, selected: true },
       },
     });
   });

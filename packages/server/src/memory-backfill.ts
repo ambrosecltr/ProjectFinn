@@ -457,7 +457,7 @@ async function planUserProfileSeedBackfill(input: {
   client: MemoryClient;
   options: MemoryBackfillOptions;
 }): Promise<MemoryBackfillPlan> {
-  if (input.client.provider !== "supermemory") {
+  if (input.client.provider !== "supermemory" && input.client.provider !== "mem0") {
     return {
       documents: [],
       scanned: 0,
