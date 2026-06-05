@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { APIError } from "supermemory";
 
 import { createIntegrationClients } from "./factory.js";
+import { ExaClient } from "./exa.js";
 import { HindsightClient } from "./hindsight.js";
 import { HonchoClient } from "./honcho.js";
 import { Mem0Client } from "./mem0.js";
 import { getSafeMemoryFailureReason } from "./memory.js";
+import { ParallelClient } from "./parallel.js";
 import { buildSupermemoryFilters, getSupermemoryFailureReason, SupermemoryClient } from "./supermemory.js";
 
 const user = {
@@ -381,6 +383,34 @@ describe("SupermemoryClient", () => {
 });
 
 describe("createIntegrationClients", () => {
+  it("creates only the selected active web provider when multiple web keys are configured", () => {
+    const autoClients = createIntegrationClients({
+      webSearchProvider: "auto",
+      models: { worker: { model: "openai:gpt-4o-mini" } },
+      memory: { provider: "none" },
+      integrations: {
+        exa: { apiKey: "exa-key" },
+        parallel: { apiKey: "parallel-key" },
+      },
+    } as never);
+    const parallelClients = createIntegrationClients({
+      webSearchProvider: "parallel",
+      models: { worker: { model: "openai:gpt-4o-mini" } },
+      memory: { provider: "none" },
+      integrations: {
+        exa: { apiKey: "exa-key" },
+        parallel: { apiKey: "parallel-key" },
+      },
+    } as never);
+
+    expect(autoClients.web).toBeInstanceOf(ExaClient);
+    expect(autoClients.web).toBe(autoClients.exa);
+    expect(autoClients.parallel).toBeUndefined();
+    expect(parallelClients.web).toBeInstanceOf(ParallelClient);
+    expect(parallelClients.web).toBe(parallelClients.parallel);
+    expect(parallelClients.exa).toBeUndefined();
+  });
+
   it("creates memory client only when a provider is selected and configured", () => {
     expect(createIntegrationClients({ memory: { provider: "none" }, integrations: {} } as never).memory).toBeUndefined();
     expect(createIntegrationClients({

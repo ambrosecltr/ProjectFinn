@@ -608,12 +608,11 @@ export function buildCapabilities(raw: {
   memoryProvider?: MemoryProvider;
   memoryMode?: MemoryMode;
 }): z.infer<typeof configSchema>["capabilities"] {
-  const hasExa = Boolean(raw.integrations.exa?.apiKey);
-  const hasParallel = Boolean(raw.integrations.parallel?.apiKey);
-  const hasWeb = resolveConfiguredWebSearchProvider({
+  const configuredWebProvider = resolveConfiguredWebSearchProvider({
     requested: raw.webSearchProvider,
     integrations: raw.integrations,
-  }) !== null;
+  });
+  const hasWeb = configuredWebProvider !== null;
   const hasFal = Boolean(raw.integrations.fal?.apiKey);
   const hasComposio = Boolean(raw.integrations.composio?.apiKey);
   const hasDeepgram = Boolean(raw.integrations.deepgram?.apiKey);
@@ -651,8 +650,8 @@ export function buildCapabilities(raw: {
     integrations: {
       web: hasWeb,
       memory: hasMemory,
-      exa: hasExa,
-      parallel: hasParallel,
+      exa: configuredWebProvider === "exa",
+      parallel: configuredWebProvider === "parallel",
       fal: hasFal,
       composio: hasComposio,
       deepgram: hasDeepgram,

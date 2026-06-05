@@ -15,7 +15,7 @@ const sourcePolicySchema = z.object({
   if (totalDomains > 200) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ["includeDomains"],
+      path: [],
       message: "includeDomains and excludeDomains can contain at most 200 domains combined.",
     });
   }

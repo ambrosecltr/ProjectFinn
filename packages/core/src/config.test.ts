@@ -141,12 +141,16 @@ describe("buildCapabilities", () => {
     });
 
     expect(exaCapabilities.integrations.web).toBe(true);
+    expect(exaCapabilities.integrations.exa).toBe(true);
+    expect(exaCapabilities.integrations.parallel).toBe(false);
     expect(resolveConfiguredWebSearchProvider({ integrations: { exa: { apiKey: "exa-key" }, parallel: { apiKey: "parallel-key" } } })).toBe("exa");
     expect(parallelCapabilities.integrations.web).toBe(true);
+    expect(parallelCapabilities.integrations.exa).toBe(false);
     expect(parallelCapabilities.integrations.parallel).toBe(true);
     expect(parallelCapabilities.tools.worker.web_search).toBe(true);
     expect(parallelCapabilities.tools.worker.get_page_contents).toBe(true);
     expect(disabledCapabilities.integrations.web).toBe(false);
+    expect(disabledCapabilities.integrations.parallel).toBe(false);
     expect(disabledCapabilities.tools.worker.web_search).toBe(false);
   });
 

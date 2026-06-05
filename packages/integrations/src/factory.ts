@@ -24,14 +24,23 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
   const configured: string[] = [];
   const unconfigured: string[] = [];
 
-  if (integrations.exa?.apiKey) {
+  const selectedWebProvider = resolveConfiguredWebSearchProvider({
+    requested: config.webSearchProvider,
+    integrations,
+  });
+
+  if (selectedWebProvider === "exa" && integrations.exa?.apiKey) {
     clients.exa = new ExaClient({ apiKey: integrations.exa.apiKey });
+    clients.web = clients.exa;
     configured.push("exa");
+    configured.push("web:exa");
+  } else if (integrations.exa?.apiKey) {
+    configured.push("exa:inactive");
   } else {
     unconfigured.push("exa");
   }
 
-  if (integrations.parallel?.apiKey) {
+  if (selectedWebProvider === "parallel" && integrations.parallel?.apiKey) {
     clients.parallel = new ParallelClient({
       apiKey: integrations.parallel.apiKey,
       baseUrl: integrations.parallel.baseUrl,
@@ -39,19 +48,16 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
       maxRetries: integrations.parallel.maxRetries,
       clientModel: config.models.worker.model,
     });
+    clients.web = clients.parallel;
     configured.push("parallel");
+    configured.push("web:parallel");
+  } else if (integrations.parallel?.apiKey) {
+    configured.push("parallel:inactive");
   } else {
     unconfigured.push("parallel");
   }
 
-  const selectedWebProvider = resolveConfiguredWebSearchProvider({
-    requested: config.webSearchProvider,
-    integrations,
-  });
-  if (selectedWebProvider && clients[selectedWebProvider]) {
-    clients.web = clients[selectedWebProvider];
-    configured.push(`web:${selectedWebProvider}`);
-  } else {
+  if (!clients.web) {
     unconfigured.push("web");
   }
 

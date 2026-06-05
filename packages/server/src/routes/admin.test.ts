@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { AppConfig } from "@finn/core";
 
-import { buildMemoryProviderStatus, buildRuntimeGatingStatus, createAdminRoutes } from "./admin.js";
+import { buildMemoryProviderStatus, buildRuntimeGatingStatus, buildWebProviderStatus, createAdminRoutes } from "./admin.js";
 
-function createConfig(capabilities: AppConfig["capabilities"], overrides: Partial<Pick<AppConfig, "integrations" | "memory">> = {}): AppConfig {
+function createConfig(capabilities: AppConfig["capabilities"], overrides: Partial<Pick<AppConfig, "integrations" | "memory" | "webSearchProvider">> = {}): AppConfig {
   return {
     spectrum: {
       projectId: "spectrum-project",
@@ -62,7 +62,7 @@ function createConfig(capabilities: AppConfig["capabilities"], overrides: Partia
       thresholdAggressive: 0.9,
       thresholdEmergency: 0.95,
     },
-    webSearchProvider: "auto",
+    webSearchProvider: overrides.webSearchProvider ?? "auto",
     hotPathIngress: {
       userGroupingWindowMs: 500,
       maxCoalesceMessages: 5,
@@ -278,6 +278,31 @@ describe("buildRuntimeGatingStatus", () => {
     expect(status.configuredToolFamilies.hotPath.disabled).toContain("reflect_memory");
     expect(status.configuredToolFamilies.worker.enabled).toContain("memory");
     expect(status.configuredToolFamilies.worker.disabled).toContain("memory_reflect");
+  });
+});
+
+describe("buildWebProviderStatus", () => {
+  it("shows configured web provider keys separately from the single active provider", () => {
+    const status = buildWebProviderStatus(createConfig(createCapabilities({
+      web: true,
+      parallel: true,
+    }), {
+      webSearchProvider: "parallel",
+      integrations: {
+        exa: { apiKey: "exa-key" },
+        parallel: { apiKey: "parallel-key" },
+      },
+    }));
+
+    expect(status).toEqual({
+      requestedProvider: "parallel",
+      selectedProvider: "parallel",
+      configured: true,
+      providers: {
+        exa: { configured: true, selected: false },
+        parallel: { configured: true, selected: true },
+      },
+    });
   });
 });
 

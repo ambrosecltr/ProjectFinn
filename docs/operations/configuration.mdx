@@ -119,7 +119,7 @@ The capability map currently includes:
 
 - `capabilities.boot`: required boot subsystems that are guaranteed present after startup
 - `capabilities.llm`: resolved provider/model per LLM process
-- `capabilities.integrations`: optional integration availability such as the selected web provider, Exa, Parallel, Fal, Composio, Deepgram, ElevenLabs, and the selected memory provider
+- `capabilities.integrations`: optional integration availability such as the selected web provider (Exa or Parallel), Fal, Composio, Deepgram, ElevenLabs, and the selected memory provider
 - `capabilities.tools`: core hot-path and worker tool families that should be visible to LLM runtimes
 
 Runtime gating is intentionally one-directional: missing optional configuration removes the matching integration clients, tools, and prompt instructions instead of exposing fallback tools that fail later. `GET /admin/status` returns both the raw `capabilities` map and a derived `runtimeGating` summary with enabled and disabled integration, media, and tool families for quick inspection.

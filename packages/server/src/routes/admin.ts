@@ -123,6 +123,31 @@ export function buildMemoryProviderStatus(config: AppConfig) {
   };
 }
 
+export function buildWebProviderStatus(config: AppConfig) {
+  const providers = {
+    exa: {
+      configured: Boolean(config.integrations?.exa?.apiKey),
+      selected: config.capabilities.integrations.exa,
+    },
+    parallel: {
+      configured: Boolean(config.integrations?.parallel?.apiKey),
+      selected: config.capabilities.integrations.parallel,
+    },
+  };
+  const selectedProvider = providers.exa.selected
+    ? "exa"
+    : providers.parallel.selected
+      ? "parallel"
+      : null;
+
+  return {
+    requestedProvider: config.webSearchProvider,
+    selectedProvider,
+    configured: selectedProvider ? providers[selectedProvider].configured : false,
+    providers,
+  };
+}
+
 export function createAdminRoutes(deps: AdminDeps): Hono {
   const app = new Hono();
 
@@ -198,6 +223,7 @@ export function createAdminRoutes(deps: AdminDeps): Hono {
             compactor: deps.config.models.compactor,
           },
           memory: buildMemoryProviderStatus(deps.config),
+          web: buildWebProviderStatus(deps.config),
           runtimeGating: buildRuntimeGatingStatus(deps.config),
           limits: {
             maxTurns: deps.config.maxTurns,
