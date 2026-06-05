@@ -245,6 +245,12 @@ Contributor workflow notes live in [CONTRIBUTING.md](CONTRIBUTING.md).
 - [Hindsight](https://github.com/vectorize-io/hindsight) for the recommended memory setup
 - [Composio](https://composio.dev), MCP, and PostHog telemetry where configured
 
+## License
+
+Finn is open source software licensed under the GNU Affero General Public License version 3 or later. See [LICENSE](LICENSE) for the full license text and [NOTICE](NOTICE) for project attribution.
+
+Hosted or modified versions of Finn must comply with the AGPL, including the source availability requirements for network services.
+
 ---
 
 Built by the [Personal Intelligence Project](https://personalintelligenceproject.com).
