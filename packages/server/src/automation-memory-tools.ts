@@ -43,12 +43,13 @@ export function createSearchMemoryTool(input: {
 export const createRecallUserMemoryTool = createSearchMemoryTool;
 
 function formatMemorySearchResult(result: MemorySearchResult): Record<string, unknown> {
+  const bestChunk = result.chunks.find((chunk) => chunk.isRelevant !== false) ?? result.chunks[0];
   const metadata = result.metadata;
   return {
     documentId: result.documentId,
     title: result.title,
-    summary: truncateText(result.summary, 700),
-    content: truncateText(result.content, 1200),
+    content: truncateText(firstNonBlankText(bestChunk?.content, result.summary, result.content), 1200) ?? "",
+    score: bestChunk?.score ?? result.score,
     createdAt: result.createdAt,
     metadata: {
       kind: typeof metadata["kind"] === "string" ? metadata["kind"] : null,
@@ -62,12 +63,11 @@ function formatMemorySearchResult(result: MemorySearchResult): Record<string, un
       timestamp: typeof metadata["timestamp"] === "string" ? metadata["timestamp"] : null,
       reason: typeof metadata["reason"] === "string" ? truncateText(metadata["reason"], 500) : null,
     },
-    chunks: result.chunks.slice(0, 3).map((chunk) => ({
-      content: truncateText(chunk.content, 900),
-      score: chunk.score,
-      isRelevant: chunk.isRelevant,
-    })),
   };
+}
+
+function firstNonBlankText(...values: Array<string | null | undefined>): string | null {
+  return values.find((value) => typeof value === "string" && value.trim().length > 0) ?? null;
 }
 
 function truncateText(value: string | null, maxLength: number): string | null {

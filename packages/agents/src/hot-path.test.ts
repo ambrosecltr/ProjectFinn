@@ -20,6 +20,7 @@ import {
   finishTurnCanStop,
   finishTurnStopCondition,
   formatMemoryContextBlock,
+  formatMemoryProfileContextBlock,
   getActiveHotPathToolNames,
   getActiveHotPathToolNamesForStep,
   HotPathAgent,
@@ -1203,6 +1204,17 @@ describe("runtime context assembly", () => {
       static: ["User prefers concise morning updates."],
       dynamic: ["User is currently planning a launch brief."],
     });
+  });
+
+  it("labels provider dynamic profile context without implying current-turn recall", () => {
+    const context = formatMemoryProfileContextBlock({
+      static: ["User prefers concise morning updates."],
+      dynamic: ["User is currently planning a launch brief."],
+    });
+
+    expect(context).toContain("Static facts:");
+    expect(context).toContain("Dynamic profile:");
+    expect(context).not.toContain("Current context:");
   });
 
   it("auto memory fails open when semantic recall fails", async () => {

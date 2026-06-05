@@ -301,6 +301,86 @@ function normalizeStringList(value: string[] | null, maxEntries: number): string
     .slice(0, maxEntries);
 }
 
+function parseHonchoRepresentationContext(representation: string, limit: number): MemoryContextResult[] {
+  const sections = splitRepresentationSections(representation);
+  const explicitObservations = parseExplicitObservationSection(sections.get("explicit observations") ?? []);
+  const inductiveObservations = parseInductiveObservationSection(sections.get("inductive observations") ?? []);
+
+  return [
+    ...explicitObservations,
+    ...inductiveObservations.slice(0, Math.max(0, limit - explicitObservations.length)),
+  ].slice(0, limit);
+}
+
+function splitRepresentationSections(representation: string): Map<string, string[]> {
+  const sections = new Map<string, string[]>();
+  let currentSection: string | null = null;
+
+  for (const rawLine of representation.split(/\r?\n/)) {
+    const heading = rawLine.match(/^##\s+(.+?)\s*$/);
+    if (heading) {
+      currentSection = heading[1].trim().toLowerCase();
+      sections.set(currentSection, []);
+      continue;
+    }
+
+    if (currentSection) {
+      sections.get(currentSection)?.push(rawLine);
+    }
+  }
+
+  return sections;
+}
+
+function parseExplicitObservationSection(lines: string[]): MemoryContextResult[] {
+  const observations: MemoryContextResult[] = [];
+  let current: MemoryContextResult | null = null;
+
+  const flushCurrent = () => {
+    if (current?.text.trim()) {
+      observations.push({ ...current, text: current.text.trim() });
+    }
+    current = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    const observation = line.match(/^\[(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?\]\s+(.+)$/);
+    if (observation) {
+      flushCurrent();
+      current = {
+        text: observation[3].trim(),
+        type: "explicit_observation",
+        occurredAt: observation[2] ? `${observation[1]} ${observation[2]}` : observation[1],
+      };
+      continue;
+    }
+
+    if (current) {
+      current = {
+        ...current,
+        text: `${current.text} ${line.replace(/^\s*[-*]\s*/, "").trim()}`.trim(),
+      };
+    }
+  }
+
+  flushCurrent();
+  return observations;
+}
+
+function parseInductiveObservationSection(lines: string[]): MemoryContextResult[] {
+  return lines.flatMap((rawLine): MemoryContextResult[] => {
+    const line = rawLine.trim();
+    const pattern = line.match(/^\*\*Pattern\*\*(?:\s+\[[^\]]+\])?:\s+(.+)$/i);
+    const text = pattern?.[1]?.trim();
+    return text ? [{ text, type: "inductive_observation", occurredAt: null }] : [];
+  });
+}
+
 function normalizeSearchResult(message: HonchoMessageLike): HonchoSearchResult | null {
   const id = toStringOrNull(message.id);
   if (!id) {
@@ -506,6 +586,11 @@ export class HonchoClient implements MemoryClient {
 
       const representation = context.representation?.trim();
       if (representation) {
+        const observations = parseHonchoRepresentationContext(representation, limit);
+        if (observations.length > 0) {
+          return { ok: true, results: observations };
+        }
+
         return {
           ok: true,
           results: [{

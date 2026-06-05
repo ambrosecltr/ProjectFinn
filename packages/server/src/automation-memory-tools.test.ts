@@ -49,11 +49,25 @@ describe("createRecallUserMemoryTool", () => {
     });
     expect(result).toEqual({
       ok: true,
-      results: [expect.objectContaining({
+      results: [{
         documentId: "doc_123",
         title: "Lease memory",
-        metadata: expect.objectContaining({ kind: "personal_intelligence_source", sourceId: "msg_123" }),
-      })],
+        content: "Alex needs lease renewals signed by Fridays.",
+        score: 0.9,
+        createdAt: "2026-05-12T12:00:00.000Z",
+        metadata: {
+          kind: "personal_intelligence_source",
+          source: null,
+          sourceType: null,
+          sourceId: "msg_123",
+          messageId: null,
+          threadId: null,
+          eventId: null,
+          day: null,
+          timestamp: null,
+          reason: null,
+        },
+      }],
     });
   });
 

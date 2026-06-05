@@ -321,7 +321,7 @@ export function formatMemoryProfileContextBlock(profile: HotPathMemoryProfileCon
 
   const dynamicFacts = profile.dynamic.slice(0, maxAutoMemoryProfileItems);
   if (dynamicFacts.length > 0) {
-    lines.push("", "Current context:");
+    lines.push("", "Dynamic profile:");
     for (const fact of dynamicFacts) {
       lines.push(`- ${fact}`);
     }

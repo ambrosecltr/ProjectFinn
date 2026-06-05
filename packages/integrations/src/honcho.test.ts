@@ -256,16 +256,31 @@ describe("HonchoClient", () => {
   it("builds automatic context from Finn's cross-session representation of the user peer", async () => {
     const setup = createClient();
     const { client } = setup;
+    await client.provisionUserBank(user);
+    const sdkClient = setup.sdkClient;
+    const finn = sdkClient.getPeer("finn");
+    finn.context.mockResolvedValueOnce({
+      representation: [
+        "## Explicit Observations",
+        "",
+        "[2025-10-16 06:31:10] User's WorkCover claim reference is C0007474115.",
+        "[2026-04-01 00:04:02] User has an active personal injury damages claim with TPIL Lawyers Pty Ltd.",
+        "",
+        "## Inductive Observations",
+        "",
+        " **Pattern** [medium]: User tracks legal and financial disputes carefully.",
+        " **Pattern** [medium]: User often keeps detailed records for grievances.",
+      ].join("\n"),
+      peerCard: null,
+    });
 
-    await client.buildContext({
+    const response = await client.buildContext({
       user,
       query: "communication style",
-      limit: 4,
+      limit: 3,
       metadata: { kind: "hot_path_turn", source: "hot_path" },
     });
 
-    const sdkClient = setup.sdkClient;
-    const finn = sdkClient.getPeer("finn");
     const contextOptions = (finn.context.mock.calls as unknown as Array<[{
       target?: string;
       searchQuery?: string;
@@ -275,9 +290,30 @@ describe("HonchoClient", () => {
     expect(contextOptions?.target).toBe("user");
     expect(finn.context).toHaveBeenCalledWith(expect.objectContaining({
       searchQuery: "communication style",
-      searchTopK: 4,
+      searchTopK: 3,
       maxConclusions: 8,
     }));
+    expect(sdkClient.search).not.toHaveBeenCalled();
+    expect(response).toEqual({
+      ok: true,
+      results: [
+        {
+          text: "User's WorkCover claim reference is C0007474115.",
+          type: "explicit_observation",
+          occurredAt: "2025-10-16 06:31:10",
+        },
+        {
+          text: "User has an active personal injury damages claim with TPIL Lawyers Pty Ltd.",
+          type: "explicit_observation",
+          occurredAt: "2026-04-01 00:04:02",
+        },
+        {
+          text: "User tracks legal and financial disputes carefully.",
+          type: "inductive_observation",
+          occurredAt: null,
+        },
+      ],
+    });
   });
 
   it("returns the peer card and broad representation for profile context", async () => {
