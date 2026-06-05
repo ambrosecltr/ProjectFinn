@@ -215,7 +215,7 @@ packages/messaging/   Spectrum adapter, routing, and sender
 packages/media/       STT, TTS, storage, and attachment processing
 packages/patterns/    Pattern store, scheduler, and run history
 packages/runtime/     User and process runtime boundaries
-packages/integrations/ External services: Hindsight, Composio, MCP, Exa, Fal
+packages/integrations/ External services: Hindsight, Composio, MCP, Exa/Parallel web, Fal
 packages/web/         Vite/React dashboard
 packages/puter/       Tauri macOS companion app
 packages/server/      Hono server, routes, startup, and event wiring

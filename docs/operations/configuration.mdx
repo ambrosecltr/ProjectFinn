@@ -119,7 +119,7 @@ The capability map currently includes:
 
 - `capabilities.boot`: required boot subsystems that are guaranteed present after startup
 - `capabilities.llm`: resolved provider/model per LLM process
-- `capabilities.integrations`: optional integration availability such as Exa, Fal, Composio, Deepgram, ElevenLabs, and the selected memory provider
+- `capabilities.integrations`: optional integration availability such as the selected web provider, Exa, Parallel, Fal, Composio, Deepgram, ElevenLabs, and the selected memory provider
 - `capabilities.tools`: core hot-path and worker tool families that should be visible to LLM runtimes
 
 Runtime gating is intentionally one-directional: missing optional configuration removes the matching integration clients, tools, and prompt instructions instead of exposing fallback tools that fail later. `GET /admin/status` returns both the raw `capabilities` map and a derived `runtimeGating` summary with enabled and disabled integration, media, and tool families for quick inspection.
@@ -128,7 +128,9 @@ Runtime gating is intentionally one-directional: missing optional configuration 
 
 | Variable | Default | Enables |
 |---|---|---|
-| `EXA_API_KEY` | unset | worker research tools |
+| `WEB_SEARCH_PROVIDER` | `auto` | selected worker web research provider: `auto`, `exa`, `parallel`, or `none` |
+| `EXA_API_KEY` | unset | Exa-backed worker research tools when selected |
+| `PARALLEL_API_KEY` | unset | Parallel-backed worker research tools when selected |
 | `FAL_API_KEY` | unset | worker image/video tools |
 | `COMPOSIO_API_KEY` | unset | worker external-service tools and connector-backed Patterns |
 | `DEEPGRAM_API_KEY` | unset | inbound audio transcription |
@@ -278,11 +280,16 @@ Stored files live inside each user's worker workspace under `files/`.
 
 ## Optional Integrations
 
-### Exa
+### Web Research
 
 | Variable | Purpose |
 |---|---|
-| `EXA_API_KEY` | enables Exa-backed web search |
+| `WEB_SEARCH_PROVIDER` | selects the worker web research backend. `auto` preserves existing behavior by preferring Exa when `EXA_API_KEY` is set, then Parallel when only `PARALLEL_API_KEY` is set. |
+| `EXA_API_KEY` | enables Exa-backed `finn.web.search` / `finn.web.fetch` when Exa is selected |
+| `PARALLEL_API_KEY` | enables Parallel-backed `finn.web.search` / `finn.web.fetch` when Parallel is selected |
+| `PARALLEL_BASE_URL` | optional Parallel API base URL override |
+| `PARALLEL_TIMEOUT_MS` | optional Parallel SDK request timeout override |
+| `PARALLEL_MAX_RETRIES` | optional Parallel SDK retry count override |
 
 ### Fal
 

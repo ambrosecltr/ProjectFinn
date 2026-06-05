@@ -50,6 +50,7 @@ const llmReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"
 const telemetryProviderSchema = z.enum(["none", "posthog"]);
 const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight", "honcho", "mem0"]);
 const memoryModeSchema = z.enum(["hybrid", "context", "tools"]);
+const webSearchProviderSchema = z.enum(["auto", "exa", "parallel", "none"]);
 const memoryConfigSchema = z.object({
   provider: memoryProviderSchema,
   mode: memoryModeSchema,
@@ -80,6 +81,7 @@ type LLMReasoningEffort = z.infer<typeof llmReasoningEffortSchema>;
 type ModelConfig = z.infer<typeof modelConfigSchema>;
 export type MemoryProvider = z.infer<typeof memoryProviderSchema>;
 export type MemoryMode = z.infer<typeof memoryModeSchema>;
+export type WebSearchProvider = z.infer<typeof webSearchProviderSchema>;
 
 const processEnvPrefixes: Record<ProcessConfigKey, string> = {
   hotPath: "HOT_PATH",
@@ -216,8 +218,10 @@ const configSchema = z.object({
       processes: z.record(modelConfigSchema),
     }),
     integrations: z.object({
+      web: z.boolean(),
       memory: z.boolean(),
       exa: z.boolean(),
+      parallel: z.boolean(),
       fal: z.boolean(),
       composio: z.boolean(),
       deepgram: z.boolean(),
@@ -241,6 +245,8 @@ const configSchema = z.object({
 
   // Context management
   context: contextConfigSchema,
+
+  webSearchProvider: webSearchProviderSchema,
 
   memory: memoryConfigSchema,
 
@@ -294,6 +300,14 @@ const configSchema = z.object({
   integrations: z
     .object({
       exa: z.object({ apiKey: z.string().optional() }).optional(),
+      parallel: z
+        .object({
+          apiKey: z.string().optional(),
+          baseUrl: z.string().url().optional(),
+          timeoutMs: z.number().int().positive().optional(),
+          maxRetries: z.number().int().nonnegative().optional(),
+        })
+        .optional(),
       fal: z
         .object({
           apiKey: z.string().optional(),
@@ -406,6 +420,22 @@ const configSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["memory", "provider"],
       message: "MEMORY_PROVIDER=mem0 requires MEM0_API_KEY.",
+    });
+  }
+
+  if (config.webSearchProvider === "exa" && !config.integrations?.exa?.apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["webSearchProvider"],
+      message: "WEB_SEARCH_PROVIDER=exa requires EXA_API_KEY.",
+    });
+  }
+
+  if (config.webSearchProvider === "parallel" && !config.integrations?.parallel?.apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["webSearchProvider"],
+      message: "WEB_SEARCH_PROVIDER=parallel requires PARALLEL_API_KEY.",
     });
   }
 });
@@ -548,13 +578,42 @@ export function resolveMemoryProvider(input: {
   return configuredProviders[0] ?? "none";
 }
 
+export function resolveConfiguredWebSearchProvider(input: {
+  requested?: WebSearchProvider;
+  integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>;
+}): Exclude<WebSearchProvider, "auto" | "none"> | null {
+  const requested = input.requested ?? "auto";
+  const hasExa = Boolean(input.integrations.exa?.apiKey);
+  const hasParallel = Boolean(input.integrations.parallel?.apiKey);
+
+  switch (requested) {
+    case "none":
+      return null;
+    case "exa":
+      return hasExa ? "exa" : null;
+    case "parallel":
+      return hasParallel ? "parallel" : null;
+    case "auto":
+      if (hasExa) {
+        return "exa";
+      }
+      return hasParallel ? "parallel" : null;
+  }
+}
+
 export function buildCapabilities(raw: {
   models: Record<"default" | ProcessConfigKey, ModelConfig>;
   integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>;
+  webSearchProvider?: WebSearchProvider;
   memoryProvider?: MemoryProvider;
   memoryMode?: MemoryMode;
 }): z.infer<typeof configSchema>["capabilities"] {
   const hasExa = Boolean(raw.integrations.exa?.apiKey);
+  const hasParallel = Boolean(raw.integrations.parallel?.apiKey);
+  const hasWeb = resolveConfiguredWebSearchProvider({
+    requested: raw.webSearchProvider,
+    integrations: raw.integrations,
+  }) !== null;
   const hasFal = Boolean(raw.integrations.fal?.apiKey);
   const hasComposio = Boolean(raw.integrations.composio?.apiKey);
   const hasDeepgram = Boolean(raw.integrations.deepgram?.apiKey);
@@ -590,8 +649,10 @@ export function buildCapabilities(raw: {
       },
     },
     integrations: {
+      web: hasWeb,
       memory: hasMemory,
       exa: hasExa,
+      parallel: hasParallel,
       fal: hasFal,
       composio: hasComposio,
       deepgram: hasDeepgram,
@@ -621,8 +682,8 @@ export function buildCapabilities(raw: {
         reflect_memory: hasHotPathMemoryTools && hasMemoryReflect,
       },
       worker: {
-        web_search: hasExa,
-        get_page_contents: hasExa,
+        web_search: hasWeb,
+        get_page_contents: hasWeb,
         create_or_edit_image: hasFal,
         create_or_edit_video: hasFal,
         mcp: true,
@@ -676,6 +737,12 @@ export function loadConfig(): AppConfig {
 
   const integrations = {
     exa: { apiKey: optionalEnv("EXA_API_KEY") },
+    parallel: {
+      apiKey: optionalEnv("PARALLEL_API_KEY"),
+      baseUrl: optionalEnv("PARALLEL_BASE_URL"),
+      timeoutMs: optionalEnv("PARALLEL_TIMEOUT_MS") ? envInt("PARALLEL_TIMEOUT_MS") : undefined,
+      maxRetries: optionalEnv("PARALLEL_MAX_RETRIES") ? envInt("PARALLEL_MAX_RETRIES") : undefined,
+    },
     fal: {
       apiKey: optionalEnv("FAL_API_KEY"),
       imageGenModel: optionalEnv("FAL_IMAGE_GEN_MODEL"),
@@ -720,6 +787,7 @@ export function loadConfig(): AppConfig {
     integrations,
   });
   const memoryMode = memoryModeSchema.parse(env("MEMORY_MODE", "tools"));
+  const webSearchProvider = webSearchProviderSchema.parse(env("WEB_SEARCH_PROVIDER", "auto"));
   const autoRecallTimeoutMs = envInt("MEMORY_AUTO_RECALL_TIMEOUT_MS", 3_000);
   const autoRecallMaxResults = envInt("MEMORY_AUTO_RECALL_MAX_RESULTS", 8);
   const provisionMentalModels = envBool("MEMORY_PROVISION_MENTAL_MODELS", true);
@@ -753,7 +821,7 @@ export function loadConfig(): AppConfig {
 
     apiKeys,
 
-    capabilities: buildCapabilities({ models, integrations, memoryProvider, memoryMode }),
+    capabilities: buildCapabilities({ models, integrations, webSearchProvider, memoryProvider, memoryMode }),
 
     context: {
       maxTokens: models.hotPath.maxContextTokens,
@@ -787,6 +855,8 @@ export function loadConfig(): AppConfig {
       autoRecallMaxResults,
       provisionMentalModels,
     },
+
+    webSearchProvider,
 
     workerLimits: {
       timeoutMs: envInt("WORKER_TIMEOUT_MS", defaultWorkerTimeoutMs),

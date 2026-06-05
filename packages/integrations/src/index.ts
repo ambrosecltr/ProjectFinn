@@ -1,5 +1,20 @@
 export { ExaClient } from "./exa.js";
-export type { ExaSearchResult, ExaContent, ExaSearchOptions } from "./exa.js";
+export type { ExaSearchResult, ExaSearchResponse, ExaContent, ExaContentResponse, ExaSearchOptions } from "./exa.js";
+
+export { ParallelClient } from "./parallel.js";
+export type {
+  ParallelContent,
+  ParallelContentOptions,
+  ParallelContentResponse,
+  ParallelExtractError,
+  ParallelFetchPolicy,
+  ParallelSearchOptions,
+  ParallelSearchResponse,
+  ParallelSearchResult,
+  ParallelSourcePolicy,
+  ParallelUsageItem,
+  ParallelWarning,
+} from "./parallel.js";
 
 export { FalClient } from "./fal.js";
 export type {

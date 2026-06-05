@@ -43,11 +43,41 @@ export interface WorkspaceRuntimeService {
 
 export type ArtifactsRuntimeService = WorkerToolOutputArtifactStore;
 
+export type WebProvider = "exa" | "parallel";
+
+export type WebSearchMode = "basic" | "advanced";
+
+export type WebSourcePolicy = {
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  afterDate?: string;
+};
+
+export type WebFetchPolicy = {
+  maxAgeSeconds?: number;
+  timeoutSeconds?: number;
+  disableCacheFallback?: boolean;
+};
+
+export type WebContentLimit = {
+  maxCharsPerResult?: number;
+};
+
 export type WebSearchOptions = {
-  query: string;
+  query?: string;
+  objective?: string;
+  searchQueries?: string[];
   numResults: number;
   maxAgeHours?: number;
   vertical?: "company" | "people";
+  mode?: WebSearchMode;
+  maxCharsTotal?: number;
+  sessionId?: string;
+  clientModel?: string;
+  sourcePolicy?: WebSourcePolicy;
+  fetchPolicy?: WebFetchPolicy;
+  maxCharsPerResult?: number;
+  location?: string;
 };
 
 export type WebSearchResult = {
@@ -56,15 +86,68 @@ export type WebSearchResult = {
   score?: number;
   publishedDate?: string;
   author?: string;
-  id: string;
+  id?: string;
   highlights?: string[];
+  excerpts?: string[];
+};
+
+export type WebUsageItem = {
+  name: string;
+  count: number;
+};
+
+export type WebWarning = {
+  type: string;
+  message: string;
+  detail?: Record<string, unknown> | null;
+};
+
+export type WebSearchResponse = {
+  provider: WebProvider;
+  results: WebSearchResult[];
+  searchId?: string;
+  sessionId?: string;
+  warnings?: WebWarning[];
+  usage?: WebUsageItem[];
+};
+
+export type WebExtractError = {
+  url: string;
+  errorType: string;
+  httpStatusCode?: number | null;
+  content?: string | null;
 };
 
 export type WebContent = {
   url: string;
   title: string | null;
+  publishedDate?: string;
   text?: string;
+  fullContent?: string;
   highlights?: string[];
+  excerpts?: string[];
+};
+
+export type WebFetchOptions = {
+  includeText?: boolean;
+  objective?: string;
+  searchQueries?: string[];
+  maxCharsTotal?: number;
+  sessionId?: string;
+  clientModel?: string;
+  fetchPolicy?: WebFetchPolicy;
+  maxCharsPerResult?: number;
+  fullContent?: boolean | WebContentLimit;
+};
+
+export type WebFetchResponse = {
+  provider: WebProvider;
+  contents: WebContent[];
+  extractId?: string;
+  sessionId?: string;
+  errors?: WebExtractError[];
+  warnings?: WebWarning[];
+  usage?: WebUsageItem[];
 };
 
 export interface McpToolSummary {
@@ -137,14 +220,16 @@ export interface McpRuntimeClient {
 }
 
 export interface WebRuntimeClient {
-  search(options: WebSearchOptions): Promise<WebSearchResult[]>;
-  getContents(url: string, options?: { includeText?: boolean }): Promise<WebContent[]>;
+  readonly provider?: WebProvider;
+  search(options: WebSearchOptions): Promise<WebSearchResponse>;
+  getContents(url: string | string[], options?: WebFetchOptions): Promise<WebFetchResponse>;
 }
 
 export interface WebRuntimeService {
   readonly kind: "finn-web-runtime";
-  search(options: WebSearchOptions): Promise<WebSearchResult[]>;
-  fetch(url: string, options?: { includeText?: boolean }): Promise<WebContent[]>;
+  readonly provider?: WebProvider;
+  search(options: WebSearchOptions): Promise<WebSearchResponse>;
+  fetch(url: string | string[], options?: WebFetchOptions): Promise<WebFetchResponse>;
 }
 
 export interface McpRuntimeService extends McpRuntimeClient {
@@ -366,6 +451,7 @@ export function narrowFilesRuntimeAccess(runtime: FilesRuntime, access: RuntimeA
 export function createWebRuntimeService(client: WebRuntimeClient): WebRuntimeService {
   return {
     kind: "finn-web-runtime",
+    ...(client.provider ? { provider: client.provider } : {}),
     search: (options) => client.search(options),
     fetch: (url, options) => client.getContents(url, options),
   };

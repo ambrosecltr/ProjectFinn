@@ -602,7 +602,7 @@ export class UserRuntimeRegistry {
       user,
       workspace: { workspaceRoot, artifactsRoot },
       files: filesRuntime,
-      ...(this.deps.integrations.exa ? { web: createWebRuntimeService(this.deps.integrations.exa) } : {}),
+      ...(this.deps.integrations.web ? { web: createWebRuntimeService(this.deps.integrations.web) } : {}),
       ...(this.deps.integrations.fal ? { creative: createCreativeRuntimeService({ client: this.deps.integrations.fal, files: filesRuntime }) } : {}),
       ...(memoryRuntime ? { memory: memoryRuntime } : {}),
       mcp: createMcpRuntimeService(userMcpService),

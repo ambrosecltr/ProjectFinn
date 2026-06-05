@@ -88,6 +88,7 @@
         "@modelcontextprotocol/sdk": "^1.29.0",
         "exa-js": "^2.12.1",
         "mem0ai": "^3.0.6",
+        "parallel-web": "^1.0.1",
         "zod": "^3",
       },
     },
@@ -2088,6 +2089,8 @@
     "p-timeout": ["p-timeout@3.2.0", "", { "dependencies": { "p-finally": "^1.0.0" } }, "sha512-rhIwUycgwwKcP9yTOOFK/AKsAopjjCakVqLHePO3CC6Mir1Z99xT+R63jZxAT5lFZLa2inS5h+ZS2GvR99/FBg=="],
 
     "pako": ["pako@1.0.11", "", {}, "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw=="],
+
+    "parallel-web": ["parallel-web@1.0.1", "", {}, "sha512-DCRPMGEvBF26fZuNnTStuOeuesC3iWik1KgbVHpYMF2ji8Oh50NOekEZFIimELUO9dzG5aA/1aIbhtsHYOKqMQ=="],
 
     "parent-module": ["parent-module@1.0.1", "", { "dependencies": { "callsites": "^3.0.0" } }, "sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g=="],
 

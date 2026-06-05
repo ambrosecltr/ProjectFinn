@@ -21,6 +21,7 @@ export function createWebToolsetDefinition(options: WebToolsetDefinitionOptions)
     processTypes: options.processTypes,
     search: options.search,
     fetch: options.fetch,
+    provider: options.runtime.provider,
   });
 
   return {

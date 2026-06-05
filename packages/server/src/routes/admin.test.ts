@@ -62,6 +62,7 @@ function createConfig(capabilities: AppConfig["capabilities"], overrides: Partia
       thresholdAggressive: 0.9,
       thresholdEmergency: 0.95,
     },
+    webSearchProvider: "auto",
     hotPathIngress: {
       userGroupingWindowMs: 500,
       maxCoalesceMessages: 5,
@@ -119,7 +120,9 @@ function createConfig(capabilities: AppConfig["capabilities"], overrides: Partia
 }
 
 function createCapabilities(overrides: {
+  web?: boolean;
   exa?: boolean;
+  parallel?: boolean;
   fal?: boolean;
   composio?: boolean;
   deepgram?: boolean;
@@ -129,7 +132,9 @@ function createCapabilities(overrides: {
   mem0?: boolean;
   supermemory?: boolean;
 } = {}): AppConfig["capabilities"] {
+  const web = overrides.web ?? overrides.exa ?? overrides.parallel ?? false;
   const exa = overrides.exa ?? false;
+  const parallel = overrides.parallel ?? false;
   const fal = overrides.fal ?? false;
   const composio = overrides.composio ?? false;
   const deepgram = overrides.deepgram ?? false;
@@ -158,8 +163,10 @@ function createCapabilities(overrides: {
       },
     },
     integrations: {
+      web,
       memory,
       exa,
+      parallel,
       fal,
       composio,
       deepgram,
@@ -189,8 +196,8 @@ function createCapabilities(overrides: {
         my_day: true,
       },
       worker: {
-        web_search: exa,
-        get_page_contents: exa,
+        web_search: web,
+        get_page_contents: web,
         create_or_edit_image: fal,
         create_or_edit_video: fal,
         mcp: true,
@@ -208,7 +215,7 @@ describe("buildRuntimeGatingStatus", () => {
   it("surfaces disabled optional integrations and worker tool families", () => {
     const status = buildRuntimeGatingStatus(createConfig(createCapabilities()));
 
-    expect(status.integrations.disabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "hindsight", "honcho", "mem0", "memory", "supermemory"]);
+    expect(status.integrations.disabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "hindsight", "honcho", "mem0", "memory", "parallel", "supermemory", "web"]);
     expect(status.media.enabled).toEqual(["fileStorage"]);
     expect(status.media.disabled).toEqual(["speechToText", "textToSpeech", "voiceRoundTrip"]);
     expect(status.configuredToolFamilies.worker.disabled).toEqual([
@@ -232,7 +239,7 @@ describe("buildRuntimeGatingStatus", () => {
       supermemory: true,
     })));
 
-    expect(status.integrations.enabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "memory", "supermemory"]);
+    expect(status.integrations.enabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "memory", "supermemory", "web"]);
     expect(status.media.enabled).toEqual(["fileStorage", "speechToText", "textToSpeech", "voiceRoundTrip"]);
     expect(status.configuredToolFamilies.worker.disabled).toEqual(["memory_reflect"]);
     expect(status.configuredToolFamilies.hotPath.enabled).toContain("search_memory");

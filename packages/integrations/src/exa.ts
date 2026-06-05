@@ -7,8 +7,10 @@ const tracer = getTracer("exa");
 const EXA_REQUEST_TIMEOUT_MS = 30_000;
 
 export type ExaSearchOptions = {
-  query: string;
-  numResults: number;
+  query?: string;
+  objective?: string;
+  searchQueries?: string[];
+  numResults?: number;
   maxAgeHours?: number;
   vertical?: "company" | "people";
 };
@@ -21,16 +23,31 @@ export type ExaSearchResult = {
   author?: string;
   id: string;
   highlights?: string[];
+  excerpts?: string[];
+};
+
+export type ExaSearchResponse = {
+  provider: "exa";
+  results: ExaSearchResult[];
 };
 
 export type ExaContent = {
   url: string;
   title: string | null;
   text?: string;
+  fullContent?: string;
   highlights?: string[];
+  excerpts?: string[];
+};
+
+export type ExaContentResponse = {
+  provider: "exa";
+  contents: ExaContent[];
 };
 
 export class ExaClient {
+  readonly provider = "exa" as const;
+
   private readonly client: Exa;
 
   constructor(opts: { apiKey: string }) {
@@ -64,17 +81,23 @@ export class ExaClient {
     }
   }
 
-  async search(opts: ExaSearchOptions): Promise<ExaSearchResult[]> {
+  async search(opts: ExaSearchOptions): Promise<ExaSearchResponse> {
+    const query = opts.query ?? opts.objective ?? opts.searchQueries?.join(" ");
+    if (!query) {
+      throw new IntegrationError("Exa search requires a query.", "exa", 400);
+    }
+    const numResults = opts.numResults ?? 5;
+
     return withSpan(tracer, "exa.search", {
-      "exa.query": opts.query.slice(0, 256),
-      "exa.numResults": opts.numResults,
+      "exa.query": query.slice(0, 256),
+      "exa.numResults": numResults,
       "exa.type": "auto",
       "exa.vertical": opts.vertical ?? "web",
     }, async (span) => {
-      logger.debug({ query: opts.query.slice(0, 256), numResults: opts.numResults, vertical: opts.vertical }, "Exa search request");
-      const response = await this.withTimeout(this.client.search(opts.query, {
+      logger.debug({ query: query.slice(0, 256), numResults, vertical: opts.vertical }, "Exa search request");
+      const response = await this.withTimeout(this.client.search(query, {
         type: "auto",
-        numResults: opts.numResults,
+        numResults,
         ...(opts.vertical === undefined ? {} : { category: opts.vertical }),
         contents: {
           highlights: true,
@@ -82,24 +105,40 @@ export class ExaClient {
         },
       }));
       span.setAttribute("exa.resultCount", response.results.length);
-      return response.results;
+      return {
+        provider: "exa",
+        results: response.results.map((result) => ({
+          ...result,
+          excerpts: result.highlights,
+        })),
+      };
     });
   }
 
-  async getContents(url: string, opts: { includeText?: boolean } = {}): Promise<ExaContent[]> {
+  async getContents(url: string | string[], opts: { includeText?: boolean } = {}): Promise<ExaContentResponse> {
+    const urls = Array.isArray(url) ? url : [url];
+    const spanUrl = urls.join(", ").slice(0, 512);
     const contents: ContentsOptions = {
       highlights: true,
       ...(opts.includeText ? { text: { maxCharacters: 20_000 } } : {}),
     };
 
     return withSpan(tracer, "exa.getContents", {
-      "exa.url": url,
+      "exa.url": spanUrl,
       "exa.includeText": Boolean(opts.includeText),
     }, async (span) => {
       logger.debug({ url, includeText: Boolean(opts.includeText) }, "Exa contents request");
-      const response = await this.withTimeout(this.client.getContents([url], contents));
+      const response = await this.withTimeout(this.client.getContents(urls, contents));
+      const results = response.results as ExaContent[];
       span.setAttribute("exa.resultCount", response.results.length);
-      return response.results;
+      return {
+        provider: "exa",
+        contents: results.map((result) => ({
+          ...result,
+          excerpts: result.highlights,
+          fullContent: result.text,
+        })),
+      };
     });
   }
 }

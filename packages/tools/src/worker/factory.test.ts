@@ -117,8 +117,8 @@ function createPatternRuntime() {
 
 function createExaClient(): ExaClient {
   const client = new ExaClient({ apiKey: "test" });
-  client.search = mock(async () => []);
-  client.getContents = mock(async () => []);
+  client.search = mock(async () => ({ provider: "exa" as const, results: [] }));
+  client.getContents = mock(async () => ({ provider: "exa" as const, contents: [] }));
   return client;
 }
 
@@ -304,11 +304,11 @@ describe("createAllWorkerTools", () => {
     expect(JSON.stringify(artifactWrite)).toContain("/artifacts/pattern-management.txt");
   });
 
-  it("exposes Web Finn JS workspace APIs to general and pattern workers only when Exa and runtime web are available", async () => {
+  it("exposes Web Finn JS workspace APIs to general and pattern workers only when a web provider and runtime web are available", async () => {
     const exa = createExaClient();
     const deps = {
       ...baseDeps,
-      integrations: { exa },
+      integrations: { exa, web: exa },
       runtime: createTestRuntime(exa),
     };
     const generalRuntime = await createWorkerRuntimeConfig(deps, { source: "user", workerType: "general" });
@@ -334,9 +334,18 @@ describe("createAllWorkerTools", () => {
 
     expect(exa.search).toHaveBeenCalledWith({
       query: "atlas",
+      objective: undefined,
+      searchQueries: undefined,
       numResults: 5,
       maxAgeHours: undefined,
       vertical: undefined,
+      mode: undefined,
+      maxCharsTotal: undefined,
+      sessionId: undefined,
+      sourcePolicy: undefined,
+      fetchPolicy: undefined,
+      maxCharsPerResult: undefined,
+      location: undefined,
     });
   });
 
@@ -344,7 +353,7 @@ describe("createAllWorkerTools", () => {
     const exa = createExaClient();
     const runtime = await createWorkerRuntimeConfig({
       ...baseDeps,
-      integrations: { exa },
+      integrations: { exa, web: exa },
       runtime: createTestRuntime(exa),
       capabilities: {
         web_search: true,
@@ -492,6 +501,7 @@ describe("createAllWorkerTools", () => {
     const tools = createAllWorkerTools({
       ...baseDeps,
       integrations: {
+        web: createExaClient(),
         exa: createExaClient(),
         fal: createFalClient(),
       },
@@ -509,6 +519,7 @@ describe("createAllWorkerTools", () => {
     const tools = createAllWorkerTools({
       ...baseDeps,
       integrations: {
+        web: createExaClient(),
         exa: createExaClient(),
         fal: createFalClient(),
       },
@@ -926,7 +937,7 @@ describe("createWorkerRuntimeConfig", () => {
     const exa = createExaClient();
     const runtime = await createWorkerRuntimeConfig({
       ...baseDeps,
-      integrations: { exa },
+      integrations: { exa, web: exa },
       runtime: createTestRuntime(exa),
       capabilities: {
         web_search: true,
@@ -1322,6 +1333,7 @@ describe("createWorkerRuntimeConfig", () => {
     const runtime = await createWorkerRuntimeConfig({
       ...baseDeps,
       integrations: {
+        web: exa,
         exa,
         fal,
       },

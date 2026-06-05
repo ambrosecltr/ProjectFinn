@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { buildCapabilities, loadConfig, requiredComposioToolkits, resetConfig, resolveMemoryProvider } from "./config.js";
+import { buildCapabilities, loadConfig, requiredComposioToolkits, resetConfig, resolveConfiguredWebSearchProvider, resolveMemoryProvider } from "./config.js";
 
 const models = {
   default: { model: "openai:gpt-4o-mini", provider: "openai" as const, maxContextTokens: 128_000 },
@@ -32,6 +32,12 @@ function setRequiredEnv(overrides: Record<string, string | undefined> = {}): voi
     HONCHO_TIMEOUT_MS: undefined,
     MEM0_API_KEY: undefined,
     MEM0_BASE_URL: undefined,
+    WEB_SEARCH_PROVIDER: undefined,
+    EXA_API_KEY: undefined,
+    PARALLEL_API_KEY: undefined,
+    PARALLEL_BASE_URL: undefined,
+    PARALLEL_TIMEOUT_MS: undefined,
+    PARALLEL_MAX_RETRIES: undefined,
     SPECTRUM_PROJECT_ID: "spectrum-project",
     SPECTRUM_PROJECT_SECRET: "spectrum-secret",
     PUBLIC_URL: "https://finn.example.com",
@@ -95,6 +101,9 @@ describe("buildCapabilities", () => {
   it("keeps memory capabilities disabled when unconfigured", () => {
     const capabilities = buildCapabilities({ models, integrations: {} });
 
+    expect(capabilities.integrations.web).toBe(false);
+    expect(capabilities.integrations.exa).toBe(false);
+    expect(capabilities.integrations.parallel).toBe(false);
     expect(capabilities.integrations.memory).toBe(false);
     expect(capabilities.integrations.supermemory).toBe(false);
     expect(capabilities.integrations.honcho).toBe(false);
@@ -105,6 +114,40 @@ describe("buildCapabilities", () => {
     expect(capabilities.tools.hotPath.my_day).toBe(true);
     expect(capabilities.tools.worker.memory).toBe(false);
     expect(capabilities.tools.worker.memory_reflect).toBe(false);
+    expect(capabilities.tools.worker.web_search).toBe(false);
+    expect(capabilities.tools.worker.get_page_contents).toBe(false);
+  });
+
+  it("enables web tools from the selected web provider", () => {
+    const exaCapabilities = buildCapabilities({
+      models,
+      integrations: {
+        exa: { apiKey: "exa-key" },
+        parallel: { apiKey: "parallel-key" },
+      },
+    });
+    const parallelCapabilities = buildCapabilities({
+      models,
+      integrations: {
+        exa: { apiKey: "exa-key" },
+        parallel: { apiKey: "parallel-key" },
+      },
+      webSearchProvider: "parallel",
+    });
+    const disabledCapabilities = buildCapabilities({
+      models,
+      integrations: { parallel: { apiKey: "parallel-key" } },
+      webSearchProvider: "none",
+    });
+
+    expect(exaCapabilities.integrations.web).toBe(true);
+    expect(resolveConfiguredWebSearchProvider({ integrations: { exa: { apiKey: "exa-key" }, parallel: { apiKey: "parallel-key" } } })).toBe("exa");
+    expect(parallelCapabilities.integrations.web).toBe(true);
+    expect(parallelCapabilities.integrations.parallel).toBe(true);
+    expect(parallelCapabilities.tools.worker.web_search).toBe(true);
+    expect(parallelCapabilities.tools.worker.get_page_contents).toBe(true);
+    expect(disabledCapabilities.integrations.web).toBe(false);
+    expect(disabledCapabilities.tools.worker.web_search).toBe(false);
   });
 
   it("enables memory search and storage capabilities when Supermemory is selected", () => {
@@ -208,6 +251,36 @@ describe("buildCapabilities", () => {
 });
 
 describe("loadConfig automation intervals", () => {
+  it("loads Parallel web provider configuration from env", () => {
+    setRequiredEnv({
+      WEB_SEARCH_PROVIDER: "parallel",
+      PARALLEL_API_KEY: "parallel-key",
+      PARALLEL_BASE_URL: "https://api.parallel.ai",
+      PARALLEL_TIMEOUT_MS: "45000",
+      PARALLEL_MAX_RETRIES: "1",
+    });
+
+    const config = loadConfig();
+
+    expect(config.webSearchProvider).toBe("parallel");
+    expect(config.integrations?.parallel).toEqual({
+      apiKey: "parallel-key",
+      baseUrl: "https://api.parallel.ai",
+      timeoutMs: 45_000,
+      maxRetries: 1,
+    });
+    expect(config.capabilities.integrations.web).toBe(true);
+    expect(config.capabilities.integrations.parallel).toBe(true);
+    expect(config.capabilities.tools.worker.web_search).toBe(true);
+    expect(config.capabilities.tools.worker.get_page_contents).toBe(true);
+  });
+
+  it("rejects explicit web provider selection without the matching API key", () => {
+    setRequiredEnv({ WEB_SEARCH_PROVIDER: "parallel" });
+
+    expect(() => loadConfig()).toThrow("PARALLEL_API_KEY");
+  });
+
   it("always scopes Composio to Finn's required mail toolkits by default", () => {
     setRequiredEnv();
 

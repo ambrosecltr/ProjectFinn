@@ -3,27 +3,39 @@ import { formatToolsetError } from "../../utils.js";
 import { webFetchInputSchema, webSearchInputSchema, type WebFetchInput } from "./schemas.js";
 
 function formatContentsForMode(contents: WebContent[], mode: WebFetchInput["mode"]): WebContent[] {
-  if (mode === "text") {
-    return contents.map(({ highlights: _highlights, ...content }) => content);
+  if (mode === "text" || mode === "full") {
+    return contents.map(({ highlights: _highlights, excerpts: _excerpts, ...content }) => content);
   }
 
-  if (mode === "highlights") {
-    return contents.map(({ text: _text, ...content }) => content);
+  if (mode === "highlights" || mode === "excerpts") {
+    return contents.map(({ text: _text, fullContent: _fullContent, ...content }) => content);
   }
 
   return contents;
 }
 
+function getFetchTarget(parsed: WebFetchInput): string | string[] {
+  return parsed.urls ?? parsed.url ?? [];
+}
+
 export async function webSearchCommand(runtime: WebRuntimeService, input: unknown) {
   const parsed = webSearchInputSchema.parse(input);
   try {
-    const results = await runtime.search({
+    return await runtime.search({
       query: parsed.query,
+      objective: parsed.objective,
+      searchQueries: parsed.searchQueries,
       numResults: parsed.numResults,
       maxAgeHours: parsed.maxAgeHours,
       vertical: parsed.vertical,
+      mode: parsed.mode,
+      maxCharsTotal: parsed.maxCharsTotal,
+      sessionId: parsed.sessionId,
+      sourcePolicy: parsed.sourcePolicy,
+      fetchPolicy: parsed.fetchPolicy,
+      maxCharsPerResult: parsed.maxCharsPerResult,
+      location: parsed.location,
     });
-    return { results };
   } catch (error) {
     return { error: formatToolsetError(error) };
   }
@@ -32,12 +44,20 @@ export async function webSearchCommand(runtime: WebRuntimeService, input: unknow
 export async function webFetchCommand(runtime: WebRuntimeService, input: unknown) {
   const parsed = webFetchInputSchema.parse(input);
   try {
-    const contents = await runtime.fetch(parsed.url, {
-      includeText: parsed.mode === "highlights" ? undefined : true,
+    const response = await runtime.fetch(getFetchTarget(parsed), {
+      includeText: parsed.mode === "text" || parsed.mode === "full" || parsed.mode === "both",
+      objective: parsed.objective,
+      searchQueries: parsed.searchQueries,
+      maxCharsTotal: parsed.maxCharsTotal,
+      sessionId: parsed.sessionId,
+      fetchPolicy: parsed.fetchPolicy,
+      maxCharsPerResult: parsed.maxCharsPerResult,
+      fullContent: parsed.fullContent,
     });
     return {
       mode: parsed.mode,
-      contents: formatContentsForMode(contents, parsed.mode),
+      ...response,
+      contents: formatContentsForMode(response.contents, parsed.mode),
     };
   } catch (error) {
     return { error: formatToolsetError(error) };

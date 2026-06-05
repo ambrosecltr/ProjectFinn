@@ -492,16 +492,23 @@ describe("runtime service builders", () => {
 
   it("attaches web runtime services only when explicitly granted", async () => {
     const webClient = {
-      search: async () => [{
-        id: "result_1",
-        url: "https://example.com",
-        title: "Example",
-      }],
-      getContents: async () => [{
-        url: "https://example.com",
-        title: "Example",
-        highlights: ["highlight"],
-      }],
+      provider: "exa" as const,
+      search: async () => ({
+        provider: "exa" as const,
+        results: [{
+          id: "result_1",
+          url: "https://example.com",
+          title: "Example",
+        }],
+      }),
+      getContents: async () => ({
+        provider: "exa" as const,
+        contents: [{
+          url: "https://example.com",
+          title: "Example",
+          highlights: ["highlight"],
+        }],
+      }),
     };
     const web = createWebRuntimeService(webClient);
     const userRuntime = createUserRuntimeServices({
@@ -519,9 +526,10 @@ describe("runtime service builders", () => {
 
     expect(withoutGrant.web).toBeUndefined();
     expect(withGrant.web).toBe(web);
-    await expect(withGrant.web?.fetch("https://example.com")).resolves.toEqual([expect.objectContaining({
-      highlights: ["highlight"],
-    })]);
+    await expect(withGrant.web?.fetch("https://example.com")).resolves.toEqual(expect.objectContaining({
+      provider: "exa",
+      contents: [expect.objectContaining({ highlights: ["highlight"] })],
+    }));
   });
 
   it("attaches creative runtime services only when explicitly granted", async () => {

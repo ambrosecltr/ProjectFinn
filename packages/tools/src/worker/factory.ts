@@ -305,7 +305,7 @@ export async function createWorkerRuntimeConfig(deps: WorkerToolsDeps, options: 
   const processType = getWorkerToolsetProcessType(options);
   const webSearchEnabled = deps.capabilities?.web_search ?? true;
   const webFetchEnabled = deps.capabilities?.get_page_contents ?? true;
-  const shouldExposeWebToolset = Boolean(deps.integrations.exa)
+  const shouldExposeWebToolset = Boolean(deps.integrations.web)
     && (processType === "worker" || processType === "pattern_worker")
     && (webSearchEnabled || webFetchEnabled);
   const creativeImageEnabled = deps.capabilities?.create_or_edit_image ?? true;

@@ -131,7 +131,7 @@ All other worker tools come from `createWorkerRuntimeConfig()` in `packages/tool
 
 | Tool family | Finn JS workspace API | Main gate |
 |---|---|---|
-| Research | `finn.web.search`, `finn.web.fetch` | Exa integration exists and worker capability flag is enabled |
+| Research | `finn.web.search`, `finn.web.fetch` | selected web provider integration exists and worker capability flag is enabled |
 | Creative | `finn.creative.image`, `finn.creative.video` | Fal integration exists and worker capability flag is enabled |
 | Files | `finn.files.*` plus native `view_image` for image pixels | `workspace_files` capability is enabled and the process runtime grants file access |
 | MCP | `finn.mcp.servers`, `finn.mcp.search`, `finn.mcp.resources`, `finn.mcp.readResource`, optional `finn.mcp.call` | MCP service exists and `mcp` capability is enabled |
@@ -293,7 +293,7 @@ Finn does not expose optional tools based on prompt text alone. Tool exposure is
 
 Important derived booleans are:
 
-- Exa API key enables the worker Finn JS workspace `web` API.
+- The selected web provider (`WEB_SEARCH_PROVIDER=auto|exa|parallel|none`) plus its API key enables the worker Finn JS workspace `web` API.
 - Fal API key enables the worker Finn JS workspace `creative` API.
 - Composio API key enables worker Composio runtime tools.
 - selected memory provider configuration enables worker user/Pattern memory search and asynchronous handled-turn/Pattern outcome storage. `MEMORY_MODE=hybrid|tools` may also expose hot-path `search_memory`, and providers that implement memory reflection, currently Hindsight and Honcho, may expose `reflect_memory` in those modes. Mem0 is search/context only. `MEMORY_MODE=context` hides hot-path memory tools and relies on compact auto-recall injection instead.

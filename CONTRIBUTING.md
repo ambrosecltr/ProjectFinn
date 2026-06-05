@@ -78,7 +78,7 @@ Start with these areas:
 - `packages/server`: Hono server, routes, event wiring, and runtime composition
 - `packages/web`: Vite React dashboard
 - `packages/db`: Drizzle schema and database access
-- `packages/integrations`: Exa, Fal, Composio, BrowserUse, MCP, and memory integrations
+- `packages/integrations`: Exa/Parallel web research, Fal, Composio, BrowserUse, MCP, and memory integrations
 - `packages/patterns`: Pattern persistence, scheduling, and run history
 - `prompts/`: runtime instructions for each agent process
 - `identity/`: Finn's personality and voice

@@ -1,4 +1,4 @@
-import type { AppConfig } from "@finn/core";
+import { resolveConfiguredWebSearchProvider, type AppConfig } from "@finn/core";
 import { createLogger } from "@finn/core";
 import { ComposioClient } from "./composio.js";
 import { ExaClient } from "./exa.js";
@@ -6,6 +6,7 @@ import { FalClient } from "./fal.js";
 import { HindsightClient } from "./hindsight.js";
 import { HonchoClient } from "./honcho.js";
 import { Mem0Client } from "./mem0.js";
+import { ParallelClient } from "./parallel.js";
 import { SupermemoryClient } from "./supermemory.js";
 import type { IntegrationClients } from "./types.js";
 
@@ -28,6 +29,30 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
     configured.push("exa");
   } else {
     unconfigured.push("exa");
+  }
+
+  if (integrations.parallel?.apiKey) {
+    clients.parallel = new ParallelClient({
+      apiKey: integrations.parallel.apiKey,
+      baseUrl: integrations.parallel.baseUrl,
+      timeoutMs: integrations.parallel.timeoutMs,
+      maxRetries: integrations.parallel.maxRetries,
+      clientModel: config.models.worker.model,
+    });
+    configured.push("parallel");
+  } else {
+    unconfigured.push("parallel");
+  }
+
+  const selectedWebProvider = resolveConfiguredWebSearchProvider({
+    requested: config.webSearchProvider,
+    integrations,
+  });
+  if (selectedWebProvider && clients[selectedWebProvider]) {
+    clients.web = clients[selectedWebProvider];
+    configured.push(`web:${selectedWebProvider}`);
+  } else {
+    unconfigured.push("web");
   }
 
   if (integrations.fal?.apiKey) {
