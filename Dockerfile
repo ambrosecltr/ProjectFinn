@@ -1,4 +1,4 @@
-FROM node:25-bookworm-slim AS node-runtime
+FROM node:24-bookworm-slim AS node-runtime
 
 FROM oven/bun:1 AS base
 WORKDIR /app
@@ -9,6 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 FROM base AS deps
 ENV NODE_ENV=development
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  g++ \
+  make \
+  python3 \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json bun.lock ./
 COPY patches/ patches/
 COPY packages/core/package.json packages/core/
