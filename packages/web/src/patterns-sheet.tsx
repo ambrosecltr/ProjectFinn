@@ -271,33 +271,6 @@ function joinedTopBorderColor(radius: PatternStackRadius): string {
   return radius.topLeft === 0 && radius.topRight === 0 ? "transparent" : "#f7f7f7";
 }
 
-interface PatternStackPadding {
-  top: number;
-  bottom: number;
-}
-
-const PATTERN_PADDING_FULL = 25;
-const PATTERN_PADDING_COMPACT = 18;
-
-function getPatternStackPadding(index: number, count: number, expandedIndex: number): PatternStackPadding {
-  if (index === expandedIndex) return { top: PATTERN_PADDING_FULL, bottom: PATTERN_PADDING_FULL };
-  if (count <= 1) return { top: PATTERN_PADDING_FULL, bottom: PATTERN_PADDING_FULL };
-  if (expandedIndex < 0) {
-    if (index === 0) return { top: PATTERN_PADDING_FULL, bottom: PATTERN_PADDING_COMPACT };
-    if (index === count - 1) return { top: PATTERN_PADDING_COMPACT, bottom: PATTERN_PADDING_FULL };
-    return { top: PATTERN_PADDING_COMPACT, bottom: PATTERN_PADDING_COMPACT };
-  }
-
-  const isAboveExpanded = index < expandedIndex;
-  const segmentStart = isAboveExpanded ? 0 : expandedIndex + 1;
-  const segmentEnd = isAboveExpanded ? expandedIndex - 1 : count - 1;
-
-  if (index === segmentStart && index === segmentEnd) return { top: PATTERN_PADDING_FULL, bottom: PATTERN_PADDING_FULL };
-  if (index === segmentStart) return { top: PATTERN_PADDING_FULL, bottom: PATTERN_PADDING_COMPACT };
-  if (index === segmentEnd) return { top: PATTERN_PADDING_COMPACT, bottom: PATTERN_PADDING_FULL };
-  return { top: PATTERN_PADDING_COMPACT, bottom: PATTERN_PADDING_COMPACT };
-}
-
 export function PatternsSheet(props: {
   patterns: Pattern[];
   connectors: PatternConnector[];
@@ -346,7 +319,7 @@ export function PatternsSheet(props: {
         </span>
         <PageTransition pageKey={filter} direction={filterDirection} className="sheet-tab-slide">
           <LayoutGroup>
-          <motion.div className="pattern-list" layout transition={PATTERN_LAYOUT_TRANSITION}>
+          <motion.div className="pattern-list" layout="position" transition={PATTERN_LAYOUT_TRANSITION}>
             {props.loading ? <PatternListSkeleton /> : null}
             {!props.loading && filteredPatterns.length === 0 ? <p className="empty-state">No {filter === "reminders" ? "reminders" : "patterns"} match this filter.</p> : null}
             <AnimatePresence initial={false}>
@@ -366,13 +339,12 @@ export function PatternsSheet(props: {
               const status = connectorIssues.length ? "blocked" : pattern.active ? "active" : "paused";
               const StatusIcon = status === "blocked" ? Alert01Icon : status === "active" ? Tick01Icon : PauseIcon;
               const stackRadius = getPatternStackRadius(index, filteredPatterns.length, expandedPatternIndex);
-              const stackPadding = getPatternStackPadding(index, filteredPatterns.length, expandedPatternIndex);
 
               return (
                 <motion.article
                   className={`automation-card ${expanded ? "expanded" : ""}`}
                   key={pattern.id}
-                  layout
+                  layout="position"
                   initial={{ opacity: 0, y: 8, scale: 0.98 }}
                   animate={{
                     opacity: 1,
@@ -386,31 +358,28 @@ export function PatternsSheet(props: {
                   exit={{ opacity: 0, height: 0, marginBottom: 0, scale: 0.98 }}
                   transition={PATTERN_LAYOUT_TRANSITION}
                 >
-                  <motion.button
-                    className="automation-card-main"
-                    type="button"
-                    aria-expanded={expanded}
-                    animate={{
-                      paddingTop: stackPadding.top,
-                      paddingBottom: stackPadding.bottom,
-                    }}
-                    transition={PATTERN_LAYOUT_TRANSITION}
-                    onClick={() => {
-                      props.onHapticFeedback();
-                      setExpandedPatternId(expanded ? null : pattern.id);
-                    }}
-                  >
-                    <span className="automation-card-title-row">
-                      <span className="automation-title">
-                        <HugeiconsIcon className="automation-type-icon" icon={TypeIcon} size={16} strokeWidth={2} aria-hidden="true" />
-                        <span>{title}</span>
+                  <div className="automation-card-surface">
+                    <button
+                      className="automation-card-main"
+                      type="button"
+                      aria-expanded={expanded}
+                      onClick={() => {
+                        props.onHapticFeedback();
+                        setExpandedPatternId(expanded ? null : pattern.id);
+                      }}
+                    >
+                      <span className="automation-card-title-row">
+                        <span className="automation-title">
+                          <HugeiconsIcon className="automation-type-icon" icon={TypeIcon} size={16} strokeWidth={2} aria-hidden="true" />
+                          <span>{title}</span>
+                        </span>
+                        <motion.span className="automation-chevron" animate={{ rotate: expanded ? 180 : 0 }} transition={PATTERN_LAYOUT_TRANSITION}>
+                          <HugeiconsIcon icon={ArrowDown01Icon} size={18} strokeWidth={2} aria-hidden="true" />
+                        </motion.span>
                       </span>
-                      <motion.span className="automation-chevron" animate={{ rotate: expanded ? 180 : 0 }} transition={PATTERN_LAYOUT_TRANSITION}>
-                        <HugeiconsIcon icon={ArrowDown01Icon} size={18} strokeWidth={2} aria-hidden="true" />
-                      </motion.span>
-                    </span>
-                    <span className="automation-summary">{summary}</span>
-                  </motion.button>
+                      <span className="automation-summary">{summary}</span>
+                    </button>
+                  </div>
                   <div className="automation-expanded">
                     <div className="automation-expanded-inner">
                       <div className="automation-footer">

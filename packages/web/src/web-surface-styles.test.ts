@@ -24,6 +24,7 @@ describe("web surface style tokens", () => {
     const todoCard = cssBlock(styles, ".my-day-todo-card");
     const patternList = cssBlock(styles, ".pattern-list");
     const automationCard = cssBlock(styles, ".automation-card");
+    const automationSurface = cssBlock(styles, ".automation-card-surface");
 
     expect(myDaySheet).toContain("const TODO_STACK_RADIUS = 15;");
     expect(patternsSheet).toContain("const PATTERN_STACK_RADIUS = 15;");
@@ -34,19 +35,21 @@ describe("web surface style tokens", () => {
     expect(todoCard).toContain("border-top-color: #f7f7f7;");
     expect(todoCard).toContain("background: #ffffff;");
     expect(patternList).toContain("border-radius: 15px;");
-    expect(automationCard).toContain("border: 1px solid #f7f7f7;");
-    expect(automationCard).toContain("border-top-color: #f7f7f7;");
-    expect(automationCard).toContain("background: #ffffff;");
+    expect(automationCard).toContain("width: 100%;");
+    expect(automationCard).toContain("padding: 5px;");
+    expect(automationCard).toContain("background: #f6f6f6;");
+    expect(automationSurface).toContain("border-radius: 10px;");
+    expect(automationSurface).toContain("background: #ffffff;");
   });
 
-  test("keeps collapsed list inner padding intentionally roomier", () => {
+  test("keeps list card interiors on a single stable padding path", () => {
     const myDaySheet = readSource("my-day-sheet.tsx");
     const patternsSheet = readSource("patterns-sheet.tsx");
 
     expect(myDaySheet).toContain("const TODO_ROW_PADDING_OUTER = 18;");
     expect(myDaySheet).toContain("const TODO_ROW_PADDING_COMPACT = 22;");
-    expect(patternsSheet).toContain("const PATTERN_PADDING_FULL = 25;");
-    expect(patternsSheet).toContain("const PATTERN_PADDING_COMPACT = 18;");
+    expect(patternsSheet).not.toContain("PATTERN_PADDING_COMPACT");
+    expect(patternsSheet).not.toContain("paddingTop: stackPadding.top");
   });
 
   test("keeps pattern copy and trigger pills at requested weights and fills", () => {
@@ -66,6 +69,15 @@ describe("web surface style tokens", () => {
     expect(handoffCard).toContain("background: #f7f7f7;");
     expect(sheetRail).toContain("background: #f7f7f7;");
     expect(segmentedSheetRail).toContain("background: #f7f7f7;");
+  });
+
+  test("lets pattern run detail panels grow to fit their contents", () => {
+    const styles = readSource("styles.css");
+    const runPanel = cssBlock(styles, ".pattern-run-panel");
+    const openRunPanel = cssBlock(styles, ".pattern-run-frame.open .pattern-run-panel");
+
+    expect(runPanel).not.toContain("max-height:");
+    expect(openRunPanel).not.toContain("max-height:");
   });
 
   test("uses native text decoration for completed todo strike-through", () => {
