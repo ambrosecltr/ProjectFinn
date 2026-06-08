@@ -145,6 +145,10 @@ function validateModelBaseUrl(
   }
 }
 
+function providerSupportsCustomBaseUrl(provider: LLMProvider): boolean {
+  return provider === "anthropic" || provider === "openai-compatible";
+}
+
 function validateModelApiKey(
   modelConfig: Pick<ModelConfig, "provider">,
   apiKey: string | undefined,
@@ -530,7 +534,7 @@ function resolveProcessModelConfig(
     maxOutputTokens: optionalEnv(`${processName}_MAX_OUTPUT_TOKENS`)
       ? envInt(`${processName}_MAX_OUTPUT_TOKENS`)
       : defaultMaxOutputTokens,
-    baseUrl: provider === "openai-compatible"
+    baseUrl: providerSupportsCustomBaseUrl(provider)
       ? optionalEnv(`${processName}_BASE_URL`) ?? defaultBaseUrl
       : undefined,
   };
@@ -726,7 +730,7 @@ export function loadConfig(): AppConfig {
       reasoningEffort: resolveReasoningEffort("DEFAULT", defaultProvider),
       maxContextTokens: defaultMaxContextTokens,
       maxOutputTokens: defaultMaxOutputTokens,
-      baseUrl: defaultProvider === "openai-compatible" ? defaultBaseUrl : undefined,
+      baseUrl: providerSupportsCustomBaseUrl(defaultProvider) ? defaultBaseUrl : undefined,
     },
     hotPath: resolveProcessModelConfig("HOT_PATH", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens, defaultBaseUrl),
     worker: resolveProcessModelConfig("WORKER", defaultProvider, defaultModel, defaultMaxContextTokens, defaultMaxOutputTokens, defaultBaseUrl),

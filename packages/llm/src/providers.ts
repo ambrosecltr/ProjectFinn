@@ -22,7 +22,7 @@ type OpenAICompatibleProvider = ReturnType<typeof createOpenAICompatible>;
 type AnyProvider = AnthropicProvider | OpenAIProvider | FireworksProvider | DeepSeekProvider | OpenAICompatibleProvider;
 
 let anthropicProviderCache:
-  | { apiKey: string; provider: AnthropicProvider }
+  | { apiKey: string; baseUrl?: string; provider: AnthropicProvider }
   | null = null;
 let openAIProviderCache: { apiKey: string; provider: OpenAIProvider } | null = null;
 let fireworksProviderCache: { apiKey: string; provider: FireworksProvider } | null = null;
@@ -49,11 +49,12 @@ function requireBaseUrl(name: LLMProviderName, baseUrl: string | undefined): str
   return baseUrl;
 }
 
-function getAnthropicProvider(apiKey: string): AnthropicProvider {
-  if (anthropicProviderCache?.apiKey !== apiKey) {
+function getAnthropicProvider(apiKey: string, baseUrl?: string): AnthropicProvider {
+  if (anthropicProviderCache?.apiKey !== apiKey || anthropicProviderCache.baseUrl !== baseUrl) {
     anthropicProviderCache = {
       apiKey,
-      provider: createAnthropic({ apiKey }),
+      baseUrl,
+      provider: createAnthropic({ apiKey, baseURL: baseUrl }),
     };
   }
 
@@ -117,7 +118,7 @@ export function getProvider(
 ): AnyProvider {
   switch (name) {
     case "anthropic":
-      return getAnthropicProvider(requireKey("anthropic", apiKey));
+      return getAnthropicProvider(requireKey("anthropic", apiKey), baseUrl);
     case "openai":
       return getOpenAIProvider(requireKey("openai", apiKey));
     case "fireworks":

@@ -459,6 +459,33 @@ describe("loadConfig LLM models", () => {
     expect(config.llm.forceToolChoice).toBe(false);
   });
 
+  it("allows Anthropic base URL overrides", () => {
+    setRequiredEnv({
+      DEFAULT_PROVIDER: "anthropic",
+      DEFAULT_MODEL: "anthropic:claude-opus-4-8",
+      DEFAULT_BASE_URL: "https://api.pioneer.ai/v1",
+      HOT_PATH_PROVIDER: "anthropic",
+      HOT_PATH_MODEL: "anthropic:claude-opus-4-8",
+      HOT_PATH_BASE_URL: "https://hot-path.example.com/v1",
+    });
+
+    const config = loadConfig();
+
+    expect(config.models.default).toEqual({
+      provider: "anthropic",
+      model: "anthropic:claude-opus-4-8",
+      baseUrl: "https://api.pioneer.ai/v1",
+      maxContextTokens: 128_000,
+    });
+    expect(config.models.hotPath).toEqual({
+      provider: "anthropic",
+      model: "anthropic:claude-opus-4-8",
+      baseUrl: "https://hot-path.example.com/v1",
+      maxContextTokens: 128_000,
+    });
+    expect(config.models.worker.baseUrl).toBe("https://api.pioneer.ai/v1");
+  });
+
   it("loads DeepSeek as a model provider", () => {
     setRequiredEnv({
       DEFAULT_PROVIDER: "deepseek",
