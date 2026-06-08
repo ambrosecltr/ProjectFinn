@@ -47,6 +47,7 @@ const contextConfigSchema = z.object({
 
 const llmProviderSchema = z.enum(["anthropic", "openai", "fireworks", "deepseek", "openai-compatible"]);
 const llmReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
+const anthropicReasoningEffortSchema = z.enum(["low", "medium", "high", "max"]);
 const telemetryProviderSchema = z.enum(["none", "posthog"]);
 const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight", "honcho", "mem0"]);
 const memoryModeSchema = z.enum(["hybrid", "context", "tools"]);
@@ -536,12 +537,18 @@ function resolveProcessModelConfig(
 }
 
 function resolveReasoningEffort(processName: string, provider: LLMProvider): LLMReasoningEffort | undefined {
-  if (provider !== "deepseek") {
+  if (provider !== "anthropic" && provider !== "deepseek") {
     return undefined;
   }
 
   const value = optionalEnv(`${processName}_REASONING_EFFORT`) ?? optionalEnv("DEFAULT_REASONING_EFFORT");
-  return value ? llmReasoningEffortSchema.parse(value) : undefined;
+  if (!value) {
+    return undefined;
+  }
+
+  return provider === "anthropic"
+    ? anthropicReasoningEffortSchema.parse(value)
+    : llmReasoningEffortSchema.parse(value);
 }
 
 function isHindsightConfigured(integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>): boolean {

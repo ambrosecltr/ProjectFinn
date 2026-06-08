@@ -570,7 +570,21 @@ describe("loadConfig LLM models", () => {
     expect(config.models.compactor.maxOutputTokens).toBe(384_000);
   });
 
-  it("loads DeepSeek reasoning effort for every process from the default env", () => {
+  it("loads reasoning effort for Anthropic and DeepSeek from the default env", () => {
+    setRequiredEnv({
+      DEFAULT_PROVIDER: "anthropic",
+      DEFAULT_MODEL: "anthropic:claude-sonnet-4-20250514",
+      DEFAULT_REASONING_EFFORT: "medium",
+    });
+
+    const anthropicConfig = loadConfig();
+
+    expect(anthropicConfig.models.default.reasoningEffort).toBe("medium");
+    expect(anthropicConfig.models.hotPath.reasoningEffort).toBe("medium");
+    expect(anthropicConfig.models.worker.reasoningEffort).toBe("medium");
+    expect(anthropicConfig.models.compactor.reasoningEffort).toBe("medium");
+
+    resetConfig();
     setRequiredEnv({
       DEFAULT_PROVIDER: "deepseek",
       DEFAULT_MODEL: "deepseek:deepseek-v4-pro",
@@ -612,6 +626,16 @@ describe("loadConfig LLM models", () => {
       DEFAULT_PROVIDER: "deepseek",
       DEFAULT_MODEL: "deepseek:deepseek-v4-pro",
       DEFAULT_REASONING_EFFORT: "minimal",
+    });
+
+    expect(() => loadConfig()).toThrow();
+  });
+
+  it("rejects Anthropic reasoning effort values unsupported by the Anthropic provider", () => {
+    setRequiredEnv({
+      DEFAULT_PROVIDER: "anthropic",
+      DEFAULT_MODEL: "anthropic:claude-sonnet-4-20250514",
+      DEFAULT_REASONING_EFFORT: "xhigh",
     });
 
     expect(() => loadConfig()).toThrow();

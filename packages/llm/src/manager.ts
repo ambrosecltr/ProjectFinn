@@ -1,5 +1,6 @@
 import type { AppConfig, ProcessType } from "@finn/core";
 import type { LanguageModel } from "ai";
+import type { AnthropicLanguageModelOptions } from "@ai-sdk/anthropic";
 import type { DeepSeekLanguageModelOptions } from "@ai-sdk/deepseek";
 
 import { getProvider } from "./providers.js";
@@ -133,6 +134,15 @@ export class LLMManager {
           thinking: { type: "enabled" },
           reasoningEffort: modelConfig.reasoningEffort,
         } satisfies DeepSeekLanguageModelOptions,
+      };
+    }
+
+    if (modelConfig.provider === "anthropic" && modelConfig.reasoningEffort) {
+      requestOptions.providerOptions = {
+        ...requestOptions.providerOptions,
+        anthropic: {
+          effort: modelConfig.reasoningEffort,
+        } satisfies AnthropicLanguageModelOptions,
       };
     }
 

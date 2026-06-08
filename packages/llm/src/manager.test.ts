@@ -75,6 +75,20 @@ describe("LLMManager request options", () => {
     expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({});
   });
 
+  it("adds Anthropic effort options when reasoning effort is configured", () => {
+    const config = createConfig("anthropic");
+    config.models.worker.reasoningEffort = "medium";
+    const manager = new LLMManager(config);
+
+    expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({
+      providerOptions: {
+        anthropic: {
+          effort: "medium",
+        },
+      },
+    });
+  });
+
   it("adds configured max output tokens to every provider", () => {
     const config = createConfig("openai");
     config.models.worker.maxOutputTokens = 384_000;
