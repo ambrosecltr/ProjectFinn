@@ -78,7 +78,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "skills": "^1.5.1",
-    "spectrum-ts": "^1.13.1",
+    "spectrum-ts": "^2.0.0",
     "supermemory": "^4.21.1",
     "vite": "^7.3.0",
     "zod": "^3"
@@ -92,6 +92,6 @@
     "typescript": "^5"
   },
   "patchedDependencies": {
-    "spectrum-ts@1.13.1": "patches/spectrum-ts@1.13.1.patch"
+    "spectrum-ts@2.0.0": "patches/spectrum-ts@2.0.0.patch"
   }
 }

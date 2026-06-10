@@ -3,6 +3,7 @@ import { convertAudioToWav } from "./audio.js";
 import { buildStoredFileUrl } from "./file-url.js";
 import { extractDocument } from "./document-extractor.js";
 import type { FileStorage } from "./file-storage.js";
+import type { SpeechToTextOptions } from "./speech.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, parse } from "node:path";
 
@@ -21,7 +22,8 @@ export interface AttachmentProcessorDeps {
   fileStorage: FileStorage;
   publicUrl: string;
   tempRoot: string;
-  transcribe?: (audioBuffer: Buffer, options?: { contentType?: string }) => Promise<string>;
+  transcribe?: (audioBuffer: Buffer, options?: SpeechToTextOptions) => Promise<string>;
+  shouldConvertAudioToWav?: (input: { mimeType: string; filename: string }) => boolean;
   convertAudioToWav?: (audioBuffer: Buffer) => Promise<Buffer>;
   compressImage?: (input: { buffer: Buffer; mimeType: string; filename: string }) => Promise<{ buffer: Buffer; mimeType: string; filename: string }>;
 }
@@ -67,7 +69,7 @@ export class AttachmentProcessor {
       } else if (this.isExtractableDocument(normalized.filename, normalized.mimeType)) {
         processedContent = await this.processDocument(normalized.buffer, normalized.mimeType, normalized.filename);
       } else if (normalized.mimeType.startsWith("audio/")) {
-        processedContent = await this.processAudio(normalized.buffer, audioKind ?? "audio", normalized.mimeType);
+        processedContent = await this.processAudio(normalized.buffer, audioKind ?? "audio", normalized.mimeType, normalized.filename);
         isTranscribedVoiceNote = this.isSpeechTranscript(processedContent);
       } else if (normalized.mimeType.startsWith("video/")) {
         processedContent = await this.processVideo(normalized.buffer);
@@ -150,20 +152,26 @@ export class AttachmentProcessor {
     return content.trim().length > 0 && !content.trim().startsWith("[");
   }
 
-  private async prepareAudioForTranscription(buffer: Buffer, mimeType: string): Promise<{ buffer: Buffer; contentType: string }> {
-    if (mimeType === "audio/x-caf") {
+  private async prepareAudioForTranscription(buffer: Buffer, mimeType: string, filename: string): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+    const shouldConvert = this.deps.shouldConvertAudioToWav
+      ? this.deps.shouldConvertAudioToWav({ mimeType, filename })
+      : mimeType === "audio/x-caf";
+
+    if (shouldConvert) {
       const wavBuffer = this.deps.convertAudioToWav
         ? await this.deps.convertAudioToWav(buffer)
         : await convertAudioToWav(buffer, { tempRoot: this.deps.tempRoot });
       return {
         buffer: wavBuffer,
         contentType: "audio/wav",
+        filename: `${parse(filename).name || "audio"}.wav`,
       };
     }
 
     return {
       buffer,
       contentType: mimeType,
+      filename,
     };
   }
 
@@ -172,15 +180,63 @@ export class AttachmentProcessor {
     buffer: Buffer;
     mimeType: string;
   }): Promise<{ buffer: Buffer; mimeType: string; filename: string }> {
-    if (!input.mimeType.startsWith("image/") && !this.isHeicLike(input.attachment.filename, input.mimeType)) {
-      return this.toNormalizedAttachment(input);
+    const resolvedMimeType = this.resolveAttachmentMimeType(input.attachment.filename, input.mimeType, input.buffer);
+    const resolvedInput = {
+      ...input,
+      mimeType: resolvedMimeType,
+    };
+
+    if (!resolvedMimeType.startsWith("image/") && !this.isHeicLike(input.attachment.filename, resolvedMimeType)) {
+      return this.toNormalizedAttachment(resolvedInput);
     }
 
-    const normalized = this.isHeicLike(input.attachment.filename, input.mimeType)
-      ? await this.normalizeHeicAttachment(input)
-      : this.toNormalizedAttachment(input);
+    const normalized = this.isHeicLike(input.attachment.filename, resolvedMimeType)
+      ? await this.normalizeHeicAttachment(resolvedInput)
+      : this.toNormalizedAttachment(resolvedInput);
 
     return this.compressImageAttachment(normalized);
+  }
+
+  private resolveAttachmentMimeType(filename: string, mimeType: string, buffer: Buffer): string {
+    const normalizedMimeType = mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
+    if (normalizedMimeType && normalizedMimeType !== "application/octet-stream") {
+      return normalizedMimeType;
+    }
+
+    const lowerFilename = filename.toLowerCase();
+    if (lowerFilename.endsWith(".caf") || this.hasMagic(buffer, "caff")) {
+      return "audio/x-caf";
+    }
+
+    if (lowerFilename.endsWith(".m4a")) {
+      return "audio/mp4";
+    }
+
+    if (lowerFilename.endsWith(".mp3")) {
+      return "audio/mpeg";
+    }
+
+    if (lowerFilename.endsWith(".wav") || this.isRiffWave(buffer)) {
+      return "audio/wav";
+    }
+
+    if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+      return "image/png";
+    }
+
+    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+      return "image/jpeg";
+    }
+
+    return normalizedMimeType || "application/octet-stream";
+  }
+
+  private hasMagic(buffer: Buffer, magic: string): boolean {
+    return buffer.subarray(0, magic.length).equals(Buffer.from(magic, "ascii"));
+  }
+
+  private isRiffWave(buffer: Buffer): boolean {
+    return this.hasMagic(buffer, "RIFF") && buffer.subarray(8, 12).equals(Buffer.from("WAVE", "ascii"));
   }
 
   private toNormalizedAttachment(input: {
@@ -385,7 +441,7 @@ export class AttachmentProcessor {
     return `[${result.kind.toUpperCase()} Content]\n${result.content}${warningText}`;
   }
 
-  private async processAudio(buffer: Buffer, audioKind: "voice_note" | "audio", mimeType: string): Promise<string> {
+  private async processAudio(buffer: Buffer, audioKind: "voice_note" | "audio", mimeType: string, filename: string): Promise<string> {
     if (!this.deps.transcribe) {
       return audioKind === "voice_note"
         ? "[The user sent a voice message, but speech-to-text is not configured. Finn cannot hear what they said.]"
@@ -393,8 +449,11 @@ export class AttachmentProcessor {
     }
 
     logger.debug("Transcribing audio attachment");
-    const transcriptionInput = await this.prepareAudioForTranscription(buffer, mimeType);
-    const transcript = await this.deps.transcribe(transcriptionInput.buffer, { contentType: transcriptionInput.contentType });
+    const transcriptionInput = await this.prepareAudioForTranscription(buffer, mimeType, filename);
+    const transcript = await this.deps.transcribe(transcriptionInput.buffer, {
+      contentType: transcriptionInput.contentType,
+      filename: transcriptionInput.filename,
+    });
     if (!transcript) {
       return "[Voice note with no recognizable speech]";
     }

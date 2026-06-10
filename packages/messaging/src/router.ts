@@ -72,8 +72,8 @@ export class MessageRouter {
       return null;
     }
 
-    // Spectrum iMessage attachment messages rely on Finn's Bun patch to retain
-    // caption text as provider metadata until the SDK preserves it upstream.
+    // Spectrum iMessage attachment messages rely on Finn's SDK patch to retain
+    // caption text as provider metadata until upstream preserves it.
     const rawText = this.extractRawText(message);
     if (!rawText || content.text.includes(rawText)) {
       return content;

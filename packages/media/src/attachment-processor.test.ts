@@ -193,10 +193,48 @@ describe("AttachmentProcessor voice gating", () => {
       expect(result.processedContent).toBe("meet me at 5");
       expect(convertAudioToWav).toHaveBeenCalledWith(Buffer.from([1, 2, 3]));
       expect(transcribe).toHaveBeenCalledTimes(1);
-      expect(transcribe).toHaveBeenCalledWith(Buffer.from("wav-audio"), { contentType: "audio/wav" });
+      expect(transcribe).toHaveBeenCalledWith(Buffer.from("wav-audio"), {
+        contentType: "audio/wav",
+        filename: "voice.wav",
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("normalizes generic Spectrum CAF attachments before audio processing", async () => {
+    const cafData = Buffer.concat([Buffer.from("caff", "ascii"), Buffer.alloc(8, 1)]);
+    const fileStorage = createFileStorage();
+    const transcribe = mock(async () => "voice transcript");
+    const convertAudioToWav = mock(async () => Buffer.from("wav-audio"));
+    const processor = new AttachmentProcessor({
+      fileStorage: fileStorage as never,
+      publicUrl: "https://example.com",
+      tempRoot: "/tmp/finn-test",
+      transcribe,
+      convertAudioToWav,
+    });
+
+    const result = await processor.process({
+      id: "att_test",
+      url: "spectrum:att_test",
+      mimeType: "application/octet-stream",
+      filename: "Audio Message.caf",
+      size: cafData.length,
+      data: cafData,
+    });
+
+    expect(result.isVoiceNote).toBe(true);
+    expect(result.isTranscribedVoiceNote).toBe(true);
+    expect(result.audioKind).toBe("voice_note");
+    expect(result.attachment.mimeType).toBe("audio/x-caf");
+    expect(result.attachment.audioKind).toBe("voice_note");
+    expect(fileStorage.store).toHaveBeenCalledWith({ filename: "Audio Message.caf", mimeType: "audio/x-caf", data: cafData, userVisible: true, origin: "message_attachment" });
+    expect(convertAudioToWav).toHaveBeenCalledWith(cafData);
+    expect(transcribe).toHaveBeenCalledWith(Buffer.from("wav-audio"), {
+      contentType: "audio/wav",
+      filename: "Audio Message.wav",
+    });
   });
 
   it("distinguishes ordinary audio files from iMessage voice notes when STT is absent", async () => {
@@ -246,7 +284,10 @@ describe("AttachmentProcessor voice gating", () => {
       });
 
       expect(result.processedContent).toBe("podcast clip");
-      expect(transcribe).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), { contentType: "audio/mpeg" });
+      expect(transcribe).toHaveBeenCalledWith(Buffer.from([1, 2, 3]), {
+        contentType: "audio/mpeg",
+        filename: "song.mp3",
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
