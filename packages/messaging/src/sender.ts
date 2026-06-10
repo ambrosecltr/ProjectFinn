@@ -45,13 +45,14 @@ export class MessageSender {
     });
   }
 
-  async sendVoiceMessage(fileId: string, options: SendMessageOptions = {}): Promise<SendMessageResult> {
+  async sendVoiceMessage(fileId: string, options: SendMessageOptions & { duration?: number } = {}): Promise<SendMessageResult> {
     return withSpan(tracer, "sender.sendVoiceMessage", { "media.fileId": fileId }, async () => {
       const file = await this.requireOwnedFile(fileId);
       return this.client.sendVoice(this.recipientPhoneNumber, {
         path: file.storagePath,
         filename: file.filename,
         mimeType: file.mimeType,
+        ...(typeof options.duration === "number" ? { duration: options.duration } : {}),
       }, options);
     });
   }

@@ -1,6 +1,6 @@
 import { WorkerToolOutputArtifactStore } from "@finn/core";
 import type { MessageSender } from "@finn/messaging";
-import type { ElevenLabsClient } from "@finn/media";
+import type { TextToSpeechClient } from "@finn/media";
 import type { FilesRuntime, MemoryRuntimeService, ProcessRuntimeServices } from "@finn/runtime";
 import { createFilesToolsetDefinition, createToolsetRuntime } from "@finn/toolsets";
 import type { ToolSet } from "ai";
@@ -25,7 +25,7 @@ export interface HotPathToolsDeps {
   sender: MessageSender;
   runtime: ProcessRuntimeServices;
   voice?: {
-    elevenlabs: ElevenLabsClient;
+    tts: TextToSpeechClient;
     tempRoot: string;
   };
   memory?: MemoryRuntimeService;

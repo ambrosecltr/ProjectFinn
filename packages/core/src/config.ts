@@ -52,6 +52,9 @@ const telemetryProviderSchema = z.enum(["none", "posthog"]);
 const memoryProviderSchema = z.enum(["none", "supermemory", "hindsight", "honcho", "mem0"]);
 const memoryModeSchema = z.enum(["hybrid", "context", "tools"]);
 const webSearchProviderSchema = z.enum(["auto", "exa", "parallel", "none"]);
+const speechToTextProviderSchema = z.enum(["auto", "none", "deepgram", "xai"]);
+const textToSpeechProviderSchema = z.enum(["auto", "none", "elevenlabs", "xai"]);
+const creativeProviderSchema = z.enum(["auto", "none", "fal", "xai"]);
 const memoryConfigSchema = z.object({
   provider: memoryProviderSchema,
   mode: memoryModeSchema,
@@ -83,6 +86,9 @@ type ModelConfig = z.infer<typeof modelConfigSchema>;
 export type MemoryProvider = z.infer<typeof memoryProviderSchema>;
 export type MemoryMode = z.infer<typeof memoryModeSchema>;
 export type WebSearchProvider = z.infer<typeof webSearchProviderSchema>;
+export type SpeechToTextProvider = z.infer<typeof speechToTextProviderSchema>;
+export type TextToSpeechProvider = z.infer<typeof textToSpeechProviderSchema>;
+export type CreativeProvider = z.infer<typeof creativeProviderSchema>;
 
 const processEnvPrefixes: Record<ProcessConfigKey, string> = {
   hotPath: "HOT_PATH",
@@ -228,6 +234,7 @@ const configSchema = z.object({
       exa: z.boolean(),
       parallel: z.boolean(),
       fal: z.boolean(),
+      xai: z.boolean(),
       composio: z.boolean(),
       deepgram: z.boolean(),
       elevenlabs: z.boolean(),
@@ -252,6 +259,12 @@ const configSchema = z.object({
   context: contextConfigSchema,
 
   webSearchProvider: webSearchProviderSchema,
+  mediaGeneration: z.object({
+    speechToTextProvider: speechToTextProviderSchema,
+    textToSpeechProvider: textToSpeechProviderSchema,
+    imageProvider: creativeProviderSchema,
+    videoProvider: creativeProviderSchema,
+  }),
 
   memory: memoryConfigSchema,
 
@@ -321,6 +334,23 @@ const configSchema = z.object({
           videoGenModel: z.string().optional(),
           imageToVideoModel: z.string().optional(),
           videoEditModel: z.string().optional(),
+        })
+        .optional(),
+      xai: z
+        .object({
+          apiKey: z.string().optional(),
+          baseUrl: z.string().url().optional(),
+          ttsVoiceId: z.string().optional(),
+          ttsLanguage: z.string().optional(),
+          ttsOutputCodec: z.enum(["mp3", "wav", "pcm", "mulaw", "alaw"]).optional(),
+          ttsSampleRate: z.number().int().positive().optional(),
+          ttsBitRate: z.number().int().positive().optional(),
+          sttLanguage: z.string().optional(),
+          sttFormat: z.boolean().optional(),
+          imageModel: z.string().optional(),
+          videoModel: z.string().optional(),
+          videoPollIntervalMs: z.number().int().positive().optional(),
+          videoPollTimeoutMs: z.number().int().positive().optional(),
         })
         .optional(),
       composio: z
@@ -442,6 +472,58 @@ const configSchema = z.object({
       path: ["webSearchProvider"],
       message: "WEB_SEARCH_PROVIDER=parallel requires PARALLEL_API_KEY.",
     });
+  }
+
+  if (config.mediaGeneration.speechToTextProvider === "deepgram" && !config.integrations?.deepgram?.apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["mediaGeneration", "speechToTextProvider"],
+      message: "STT_PROVIDER=deepgram requires DEEPGRAM_API_KEY.",
+    });
+  }
+
+  if (config.mediaGeneration.speechToTextProvider === "xai" && !config.integrations?.xai?.apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["mediaGeneration", "speechToTextProvider"],
+      message: "STT_PROVIDER=xai requires XAI_API_KEY.",
+    });
+  }
+
+  if (config.mediaGeneration.textToSpeechProvider === "elevenlabs" && !config.integrations?.elevenlabs?.apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["mediaGeneration", "textToSpeechProvider"],
+      message: "TTS_PROVIDER=elevenlabs requires ELEVENLABS_API_KEY.",
+    });
+  }
+
+  if (config.mediaGeneration.textToSpeechProvider === "xai" && !config.integrations?.xai?.apiKey) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["mediaGeneration", "textToSpeechProvider"],
+      message: "TTS_PROVIDER=xai requires XAI_API_KEY.",
+    });
+  }
+
+  for (const [providerKey, provider] of [
+    ["imageProvider", config.mediaGeneration.imageProvider],
+    ["videoProvider", config.mediaGeneration.videoProvider],
+  ] as const) {
+    if (provider === "fal" && !config.integrations?.fal?.apiKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["mediaGeneration", providerKey],
+        message: `${providerKey === "imageProvider" ? "IMAGE_PROVIDER" : "VIDEO_PROVIDER"}=fal requires FAL_API_KEY.`,
+      });
+    }
+    if (provider === "xai" && !config.integrations?.xai?.apiKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["mediaGeneration", providerKey],
+        message: `${providerKey === "imageProvider" ? "IMAGE_PROVIDER" : "VIDEO_PROVIDER"}=xai requires XAI_API_KEY.`,
+      });
+    }
   }
 });
 
@@ -612,10 +694,83 @@ export function resolveConfiguredWebSearchProvider(input: {
   }
 }
 
+export function resolveConfiguredSpeechToTextProvider(input: {
+  requested?: SpeechToTextProvider;
+  integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>;
+}): Exclude<SpeechToTextProvider, "auto" | "none"> | null {
+  const requested = input.requested ?? "auto";
+  const hasDeepgram = Boolean(input.integrations.deepgram?.apiKey);
+  const hasXai = Boolean(input.integrations.xai?.apiKey);
+
+  switch (requested) {
+    case "none":
+      return null;
+    case "deepgram":
+      return hasDeepgram ? "deepgram" : null;
+    case "xai":
+      return hasXai ? "xai" : null;
+    case "auto":
+      if (hasDeepgram) {
+        return "deepgram";
+      }
+      return hasXai ? "xai" : null;
+  }
+}
+
+export function resolveConfiguredTextToSpeechProvider(input: {
+  requested?: TextToSpeechProvider;
+  integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>;
+}): Exclude<TextToSpeechProvider, "auto" | "none"> | null {
+  const requested = input.requested ?? "auto";
+  const hasElevenlabs = Boolean(input.integrations.elevenlabs?.apiKey);
+  const hasXai = Boolean(input.integrations.xai?.apiKey);
+
+  switch (requested) {
+    case "none":
+      return null;
+    case "elevenlabs":
+      return hasElevenlabs ? "elevenlabs" : null;
+    case "xai":
+      return hasXai ? "xai" : null;
+    case "auto":
+      if (hasElevenlabs) {
+        return "elevenlabs";
+      }
+      return hasXai ? "xai" : null;
+  }
+}
+
+export function resolveConfiguredCreativeProvider(input: {
+  requested?: CreativeProvider;
+  integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>;
+}): Exclude<CreativeProvider, "auto" | "none"> | null {
+  const requested = input.requested ?? "auto";
+  const hasFal = Boolean(input.integrations.fal?.apiKey);
+  const hasXai = Boolean(input.integrations.xai?.apiKey);
+
+  switch (requested) {
+    case "none":
+      return null;
+    case "fal":
+      return hasFal ? "fal" : null;
+    case "xai":
+      return hasXai ? "xai" : null;
+    case "auto":
+      if (hasFal) {
+        return "fal";
+      }
+      return hasXai ? "xai" : null;
+  }
+}
+
 export function buildCapabilities(raw: {
   models: Record<"default" | ProcessConfigKey, ModelConfig>;
   integrations: NonNullable<z.infer<typeof configSchema>["integrations"]>;
   webSearchProvider?: WebSearchProvider;
+  speechToTextProvider?: SpeechToTextProvider;
+  textToSpeechProvider?: TextToSpeechProvider;
+  imageProvider?: CreativeProvider;
+  videoProvider?: CreativeProvider;
   memoryProvider?: MemoryProvider;
   memoryMode?: MemoryMode;
 }): z.infer<typeof configSchema>["capabilities"] {
@@ -624,7 +779,24 @@ export function buildCapabilities(raw: {
     integrations: raw.integrations,
   });
   const hasWeb = configuredWebProvider !== null;
+  const configuredSpeechToTextProvider = resolveConfiguredSpeechToTextProvider({
+    requested: raw.speechToTextProvider,
+    integrations: raw.integrations,
+  });
+  const configuredTextToSpeechProvider = resolveConfiguredTextToSpeechProvider({
+    requested: raw.textToSpeechProvider,
+    integrations: raw.integrations,
+  });
+  const configuredImageProvider = resolveConfiguredCreativeProvider({
+    requested: raw.imageProvider,
+    integrations: raw.integrations,
+  });
+  const configuredVideoProvider = resolveConfiguredCreativeProvider({
+    requested: raw.videoProvider,
+    integrations: raw.integrations,
+  });
   const hasFal = Boolean(raw.integrations.fal?.apiKey);
+  const hasXai = Boolean(raw.integrations.xai?.apiKey);
   const hasComposio = Boolean(raw.integrations.composio?.apiKey);
   const hasDeepgram = Boolean(raw.integrations.deepgram?.apiKey);
   const hasElevenlabs = Boolean(raw.integrations.elevenlabs?.apiKey);
@@ -664,6 +836,7 @@ export function buildCapabilities(raw: {
       exa: configuredWebProvider === "exa",
       parallel: configuredWebProvider === "parallel",
       fal: hasFal,
+      xai: hasXai,
       composio: hasComposio,
       deepgram: hasDeepgram,
       elevenlabs: hasElevenlabs,
@@ -674,9 +847,9 @@ export function buildCapabilities(raw: {
     },
     media: {
       fileStorage: true,
-      speechToText: hasDeepgram,
-      textToSpeech: hasElevenlabs,
-      voiceRoundTrip: hasDeepgram && hasElevenlabs,
+      speechToText: configuredSpeechToTextProvider !== null,
+      textToSpeech: configuredTextToSpeechProvider !== null,
+      voiceRoundTrip: configuredSpeechToTextProvider !== null && configuredTextToSpeechProvider !== null,
     },
     tools: {
       hotPath: {
@@ -694,8 +867,8 @@ export function buildCapabilities(raw: {
       worker: {
         web_search: hasWeb,
         get_page_contents: hasWeb,
-        create_or_edit_image: hasFal,
-        create_or_edit_video: hasFal,
+        create_or_edit_image: configuredImageProvider !== null,
+        create_or_edit_video: configuredVideoProvider !== null,
         mcp: true,
         patterns: true,
         composio: hasComposio,
@@ -761,6 +934,21 @@ export function loadConfig(): AppConfig {
       imageToVideoModel: optionalEnv("FAL_IMAGE_TO_VIDEO_MODEL"),
       videoEditModel: optionalEnv("FAL_VIDEO_EDIT_MODEL"),
     },
+    xai: {
+      apiKey: optionalEnv("XAI_API_KEY"),
+      baseUrl: optionalEnv("XAI_BASE_URL"),
+      ttsVoiceId: optionalEnv("XAI_TTS_VOICE_ID"),
+      ttsLanguage: optionalEnv("XAI_TTS_LANGUAGE"),
+      ttsOutputCodec: optionalEnv("XAI_TTS_OUTPUT_CODEC") as "mp3" | "wav" | "pcm" | "mulaw" | "alaw" | undefined,
+      ttsSampleRate: optionalEnv("XAI_TTS_SAMPLE_RATE") ? envInt("XAI_TTS_SAMPLE_RATE") : undefined,
+      ttsBitRate: optionalEnv("XAI_TTS_BIT_RATE") ? envInt("XAI_TTS_BIT_RATE") : undefined,
+      sttLanguage: optionalEnv("XAI_STT_LANGUAGE"),
+      sttFormat: optionalEnv("XAI_STT_FORMAT") ? envBool("XAI_STT_FORMAT", true) : undefined,
+      imageModel: optionalEnv("XAI_IMAGE_MODEL"),
+      videoModel: optionalEnv("XAI_VIDEO_MODEL"),
+      videoPollIntervalMs: optionalEnv("XAI_VIDEO_POLL_INTERVAL_MS") ? envInt("XAI_VIDEO_POLL_INTERVAL_MS") : undefined,
+      videoPollTimeoutMs: optionalEnv("XAI_VIDEO_POLL_TIMEOUT_MS") ? envInt("XAI_VIDEO_POLL_TIMEOUT_MS") : undefined,
+    },
     composio: {
       apiKey: optionalEnv("COMPOSIO_API_KEY"),
       callbackUrl: optionalEnv("COMPOSIO_CALLBACK_URL"),
@@ -798,6 +986,12 @@ export function loadConfig(): AppConfig {
   });
   const memoryMode = memoryModeSchema.parse(env("MEMORY_MODE", "tools"));
   const webSearchProvider = webSearchProviderSchema.parse(env("WEB_SEARCH_PROVIDER", "auto"));
+  const mediaGeneration = {
+    speechToTextProvider: speechToTextProviderSchema.parse(env("STT_PROVIDER", "auto")),
+    textToSpeechProvider: textToSpeechProviderSchema.parse(env("TTS_PROVIDER", "auto")),
+    imageProvider: creativeProviderSchema.parse(env("IMAGE_PROVIDER", "auto")),
+    videoProvider: creativeProviderSchema.parse(env("VIDEO_PROVIDER", "auto")),
+  };
   const autoRecallTimeoutMs = envInt("MEMORY_AUTO_RECALL_TIMEOUT_MS", 3_000);
   const autoRecallMaxResults = envInt("MEMORY_AUTO_RECALL_MAX_RESULTS", 8);
   const provisionMentalModels = envBool("MEMORY_PROVISION_MENTAL_MODELS", true);
@@ -831,7 +1025,17 @@ export function loadConfig(): AppConfig {
 
     apiKeys,
 
-    capabilities: buildCapabilities({ models, integrations, webSearchProvider, memoryProvider, memoryMode }),
+    capabilities: buildCapabilities({
+      models,
+      integrations,
+      webSearchProvider,
+      speechToTextProvider: mediaGeneration.speechToTextProvider,
+      textToSpeechProvider: mediaGeneration.textToSpeechProvider,
+      imageProvider: mediaGeneration.imageProvider,
+      videoProvider: mediaGeneration.videoProvider,
+      memoryProvider,
+      memoryMode,
+    }),
 
     context: {
       maxTokens: models.hotPath.maxContextTokens,
@@ -867,6 +1071,7 @@ export function loadConfig(): AppConfig {
     },
 
     webSearchProvider,
+    mediaGeneration,
 
     workerLimits: {
       timeoutMs: envInt("WORKER_TIMEOUT_MS", defaultWorkerTimeoutMs),

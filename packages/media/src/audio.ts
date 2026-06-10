@@ -63,6 +63,15 @@ export async function convertAudioToCaf(input: Buffer, options?: AudioConversion
   ], "CAF", options);
 }
 
+export async function convertAudioToM4a(input: Buffer, options?: AudioConversionOptions): Promise<Buffer> {
+  return transcodeAudio(input, "output.m4a", [
+    "-acodec",
+    "aac",
+    "-f",
+    "ipod",
+  ], "M4A", options);
+}
+
 export async function convertAudioToWav(input: Buffer, options?: AudioConversionOptions): Promise<Buffer> {
   return transcodeAudio(input, "output.wav", [
     "-acodec",
@@ -74,4 +83,41 @@ export async function convertAudioToWav(input: Buffer, options?: AudioConversion
     "-f",
     "wav",
   ], "WAV", options);
+}
+
+export async function probeAudioDuration(input: Buffer, options: AudioConversionOptions = {}): Promise<number | undefined> {
+  const tempRoot = options.tempRoot ?? "/tmp";
+  await mkdir(tempRoot, { recursive: true });
+  const tempDir = await mkdtemp(join(tempRoot, ".finn-audio-probe-"));
+  const inputPath = join(tempDir, "input.audio");
+
+  try {
+    await writeFile(inputPath, input);
+    const proc = Bun.spawn([
+      "ffprobe",
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      inputPath,
+    ], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const [stdoutText, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      proc.exited,
+    ]);
+    if (exitCode !== 0) {
+      return undefined;
+    }
+
+    const duration = Number(stdoutText.trim());
+    return Number.isFinite(duration) && duration > 0 ? duration : undefined;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }

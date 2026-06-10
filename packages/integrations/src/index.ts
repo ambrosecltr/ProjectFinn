@@ -32,6 +32,8 @@ export type {
   FalImageToVideoOptions,
   FalEditVideoOptions,
 } from "./fal.js";
+export { XaiImagineClient } from "./xai.js";
+export type { XaiImagineClientOptions, XaiImageResult, XaiVideoResult } from "./xai.js";
 
 export { ComposioClient } from "./composio.js";
 export type {

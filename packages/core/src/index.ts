@@ -3,8 +3,18 @@
 // ---------------------------------------------------------------------------
 
 // Config
-export { buildCapabilities, loadConfig, loadIdentityFile, requiredComposioToolkits, resetConfig, resolveConfiguredWebSearchProvider } from "./config.js";
-export type { AppConfig, MemoryMode, MemoryProvider, WebSearchProvider } from "./config.js";
+export {
+  buildCapabilities,
+  loadConfig,
+  loadIdentityFile,
+  requiredComposioToolkits,
+  resetConfig,
+  resolveConfiguredCreativeProvider,
+  resolveConfiguredSpeechToTextProvider,
+  resolveConfiguredTextToSpeechProvider,
+  resolveConfiguredWebSearchProvider,
+} from "./config.js";
+export type { AppConfig, CreativeProvider, MemoryMode, MemoryProvider, SpeechToTextProvider, TextToSpeechProvider, WebSearchProvider } from "./config.js";
 export { publicPatternScheduleSchema } from "./schedules.js";
 export type { PublicPatternSchedule } from "./schedules.js";
 export { sanitizePostgresJson, sanitizePostgresJsonValue, sanitizePostgresText } from "./postgres-json.js";

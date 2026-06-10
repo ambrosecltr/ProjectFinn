@@ -1,4 +1,8 @@
-import { resolveConfiguredWebSearchProvider, type AppConfig } from "@finn/core";
+import {
+  resolveConfiguredCreativeProvider,
+  resolveConfiguredWebSearchProvider,
+  type AppConfig,
+} from "@finn/core";
 import { createLogger } from "@finn/core";
 import { ComposioClient } from "./composio.js";
 import { ExaClient } from "./exa.js";
@@ -9,8 +13,50 @@ import { Mem0Client } from "./mem0.js";
 import { ParallelClient } from "./parallel.js";
 import { SupermemoryClient } from "./supermemory.js";
 import type { IntegrationClients } from "./types.js";
+import { XaiImagineClient } from "./xai.js";
 
 const logger = createLogger("integrations");
+
+type CreativeImageClient = Pick<FalClient | XaiImagineClient, "generateImage" | "editImage">;
+type CreativeVideoClient = Pick<FalClient | XaiImagineClient, "generateVideo" | "imageToVideo" | "editVideo">;
+
+function createCreativeRouter(input: {
+  image?: CreativeImageClient;
+  video?: CreativeVideoClient;
+}) {
+  return {
+    generateImage: (options: Parameters<CreativeImageClient["generateImage"]>[0]) => {
+      if (!input.image) {
+        throw new Error("Creative image generation is not configured.");
+      }
+      return input.image.generateImage(options);
+    },
+    editImage: (options: Parameters<CreativeImageClient["editImage"]>[0]) => {
+      if (!input.image) {
+        throw new Error("Creative image editing is not configured.");
+      }
+      return input.image.editImage(options);
+    },
+    generateVideo: (options: Parameters<CreativeVideoClient["generateVideo"]>[0]) => {
+      if (!input.video) {
+        throw new Error("Creative video generation is not configured.");
+      }
+      return input.video.generateVideo(options);
+    },
+    imageToVideo: (options: Parameters<CreativeVideoClient["imageToVideo"]>[0]) => {
+      if (!input.video) {
+        throw new Error("Creative image-to-video generation is not configured.");
+      }
+      return input.video.imageToVideo(options);
+    },
+    editVideo: (options: Parameters<CreativeVideoClient["editVideo"]>[0]) => {
+      if (!input.video) {
+        throw new Error("Creative video editing is not configured.");
+      }
+      return input.video.editVideo(options);
+    },
+  };
+}
 
 export function createIntegrationClients(config: AppConfig): IntegrationClients {
   const clients: IntegrationClients = {};
@@ -73,6 +119,38 @@ export function createIntegrationClients(config: AppConfig): IntegrationClients 
     configured.push("fal");
   } else {
     unconfigured.push("fal");
+  }
+
+  if (integrations.xai?.apiKey) {
+    clients.xaiImagine = new XaiImagineClient({
+      apiKey: integrations.xai.apiKey,
+      baseUrl: integrations.xai.baseUrl,
+      imageModel: integrations.xai.imageModel,
+      videoModel: integrations.xai.videoModel,
+      videoPollIntervalMs: integrations.xai.videoPollIntervalMs,
+      videoPollTimeoutMs: integrations.xai.videoPollTimeoutMs,
+    });
+    configured.push("xai");
+  } else {
+    unconfigured.push("xai");
+  }
+
+  const imageProvider = resolveConfiguredCreativeProvider({
+    requested: config.mediaGeneration?.imageProvider,
+    integrations,
+  });
+  const videoProvider = resolveConfiguredCreativeProvider({
+    requested: config.mediaGeneration?.videoProvider,
+    integrations,
+  });
+  const imageClient = imageProvider === "fal" ? clients.fal : imageProvider === "xai" ? clients.xaiImagine : undefined;
+  const videoClient = videoProvider === "fal" ? clients.fal : videoProvider === "xai" ? clients.xaiImagine : undefined;
+  if (imageClient || videoClient) {
+    clients.creative = createCreativeRouter({ image: imageClient, video: videoClient });
+    configured.push(`creative:image:${imageProvider ?? "none"}`);
+    configured.push(`creative:video:${videoProvider ?? "none"}`);
+  } else {
+    unconfigured.push("creative");
   }
 
   if (integrations.composio?.apiKey) {

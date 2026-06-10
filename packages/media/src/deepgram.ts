@@ -1,4 +1,5 @@
 import { createLogger, getTracer, withSpan } from "@finn/core";
+import type { SpeechToTextOptions } from "./speech.js";
 
 const logger = createLogger("deepgram");
 const tracer = getTracer("deepgram");
@@ -21,7 +22,7 @@ export class DeepgramClient {
    */
   async transcribe(
     audioBuffer: Buffer,
-    options?: { model?: string; language?: string; smartFormat?: boolean; contentType?: string },
+    options?: SpeechToTextOptions & { model?: string; language?: string; smartFormat?: boolean },
   ): Promise<string> {
     const model = options?.model ?? "nova-3";
     const language = options?.language ?? "en";

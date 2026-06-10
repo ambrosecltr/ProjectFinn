@@ -19,9 +19,11 @@ export type {
   ExtractDocumentResult,
 } from "./document-extractor.js";
 export { buildStoredFileUrl, buildStoredVoiceFileUrl } from "./file-url.js";
+export type { SpeechToTextClient, SpeechToTextOptions, TextToSpeechClient } from "./speech.js";
 export { DeepgramClient, type DeepgramConfig } from "./deepgram.js";
 export { ElevenLabsClient, type ElevenLabsConfig } from "./elevenlabs.js";
-export { convertAudioToCaf, convertAudioToWav } from "./audio.js";
+export { XaiMediaClient, type XaiMediaConfig } from "./xai.js";
+export { convertAudioToCaf, convertAudioToM4a, convertAudioToWav, probeAudioDuration } from "./audio.js";
 export {
   AttachmentProcessor,
   type AttachmentProcessorDeps,

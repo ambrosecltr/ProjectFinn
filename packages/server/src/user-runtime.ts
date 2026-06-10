@@ -11,7 +11,7 @@ import * as schema from "@finn/db";
 import { PatternStore } from "@finn/patterns";
 import { McpService, type ComposioTriggerTypeSummary, type IntegrationClients } from "@finn/integrations";
 import { LLMManager } from "@finn/llm";
-import { AttachmentProcessor, DeepgramClient, ElevenLabsClient, FileStorage } from "@finn/media";
+import { AttachmentProcessor, FileStorage, type SpeechToTextClient, type TextToSpeechClient } from "@finn/media";
 import { MessageSender, SpectrumClient } from "@finn/messaging";
 import {
   createFilesRuntime,
@@ -67,11 +67,15 @@ export function canExposeVoiceReplyTool(input: {
   return input.textToSpeechAvailable && input.hasTextToSpeechClient;
 }
 
-function isVoiceReplyAvailable(config: AppConfig, elevenlabsClient?: ElevenLabsClient): boolean {
+function isVoiceReplyAvailable(config: AppConfig, textToSpeechClient?: TextToSpeechClient): boolean {
   return canExposeVoiceReplyTool({
     textToSpeechAvailable: config.capabilities.media.textToSpeech,
-    hasTextToSpeechClient: Boolean(elevenlabsClient),
+    hasTextToSpeechClient: Boolean(textToSpeechClient),
   });
+}
+
+export function shouldConvertInboundAudioToWav(input: { mimeType: string }): boolean {
+  return input.mimeType === "audio/x-caf";
 }
 
 function hotPathCodeModeRunId(message: InboundMessage): string {
@@ -228,8 +232,8 @@ export class UserRuntimeRegistry {
       integrations: IntegrationClients;
       userRegistry: UserRegistry;
       puterBridge?: PuterBridge;
-      deepgramClient?: DeepgramClient;
-      elevenlabsClient?: ElevenLabsClient;
+      speechToTextClient?: SpeechToTextClient;
+      textToSpeechClient?: TextToSpeechClient;
     },
   ) {}
 
@@ -603,7 +607,7 @@ export class UserRuntimeRegistry {
       workspace: { workspaceRoot, artifactsRoot },
       files: filesRuntime,
       ...(this.deps.integrations.web ? { web: createWebRuntimeService(this.deps.integrations.web) } : {}),
-      ...(this.deps.integrations.fal ? { creative: createCreativeRuntimeService({ client: this.deps.integrations.fal, files: filesRuntime }) } : {}),
+      ...(this.deps.integrations.creative ? { creative: createCreativeRuntimeService({ client: this.deps.integrations.creative, files: filesRuntime }) } : {}),
       ...(memoryRuntime ? { memory: memoryRuntime } : {}),
       mcp: createMcpRuntimeService(userMcpService),
       ...(userComposio ? { composio: userComposio } : {}),
@@ -682,7 +686,7 @@ export class UserRuntimeRegistry {
       getWorkerTools: createGetWorkerTools(workerToolsDeps),
     });
     await workerManager.reconcileInterrupted();
-    const voiceReplyAvailable = isVoiceReplyAvailable(config, this.deps.elevenlabsClient);
+    const voiceReplyAvailable = isVoiceReplyAvailable(config, this.deps.textToSpeechClient);
     const hotPathAgent = createHotPathAgent({
       db,
       config,
@@ -754,8 +758,8 @@ export class UserRuntimeRegistry {
               store: myDayStore,
             }
           : undefined,
-        voice: voiceReplyAvailable && this.deps.elevenlabsClient
-          ? { elevenlabs: this.deps.elevenlabsClient, tempRoot: `${workspaceRoot}/tmp` }
+        voice: voiceReplyAvailable && this.deps.textToSpeechClient
+          ? { tts: this.deps.textToSpeechClient, tempRoot: `${workspaceRoot}/tmp` }
           : undefined,
       }),
       compactor,
@@ -766,7 +770,10 @@ export class UserRuntimeRegistry {
       fileStorage: userFileStorage,
       publicUrl: config.publicUrl,
       tempRoot: `${workspaceRoot}/tmp`,
-      transcribe: this.deps.deepgramClient ? (buf) => this.deps.deepgramClient!.transcribe(buf) : undefined,
+      transcribe: this.deps.speechToTextClient
+        ? (buf, options) => this.deps.speechToTextClient!.transcribe(buf, options)
+        : undefined,
+      shouldConvertAudioToWav: shouldConvertInboundAudioToWav,
     });
 
     const voiceAwareAgent = {

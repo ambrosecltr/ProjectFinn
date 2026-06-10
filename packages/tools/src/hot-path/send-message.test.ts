@@ -46,7 +46,7 @@ describe("createSendMessageTool", () => {
     });
   });
 
-  it("sends voice replies as caf media-only messages", async () => {
+  it("sends voice replies as m4a media-only messages with duration", async () => {
     const sender = {
       sendText: mock(async () => {}),
       sendMedia: mock(async () => {}),
@@ -63,14 +63,15 @@ describe("createSendMessageTool", () => {
         })),
       },
     };
-    const elevenlabs = {
+    const tts = {
       synthesize: mock(async () => Buffer.from("mp3")),
     };
-    const convertAudioToCaf = mock(async () => Buffer.from("caf"));
+    const convertAudioToM4a = mock(async () => Buffer.from("m4a"));
+    const probeAudioDuration = mock(async () => 2.5);
 
     const sendMessageTool = createSendMessageTool({
       sender,
-      voice: { elevenlabs: elevenlabs as never, files: files as never, tempRoot: "/tmp/finn-test", convertAudioToCaf },
+      voice: { tts: tts as never, files: files as never, tempRoot: "/tmp/finn-test", convertAudioToM4a, probeAudioDuration },
     });
 
     const execute = sendMessageTool.execute as unknown as (input: { text: string; voice_message: true }, options: never) => Promise<unknown>;
@@ -87,11 +88,12 @@ describe("createSendMessageTool", () => {
       outboundMessageHandles: [],
       instruction: "This is an outbound delivery receipt, not a user reply. Continue only if this same response still has unsent content; otherwise call finish_turn.",
     });
-    expect(elevenlabs.synthesize).toHaveBeenCalledWith("talk soon");
-    expect(convertAudioToCaf).toHaveBeenCalledWith(Buffer.from("mp3"));
-    expect(files.storedFiles.store.mock.calls[0]?.[0].filename.endsWith(".caf")).toBe(true);
-    expect(files.storedFiles.store.mock.calls[0]?.[0].mimeType).toBe("audio/x-caf");
-    expect(sender.sendVoiceMessage).toHaveBeenCalledWith("file_voice", { replyToMessageHandle: undefined });
+    expect(tts.synthesize).toHaveBeenCalledWith("talk soon");
+    expect(convertAudioToM4a).toHaveBeenCalledWith(Buffer.from("mp3"));
+    expect(probeAudioDuration).toHaveBeenCalledWith(Buffer.from("m4a"));
+    expect(files.storedFiles.store.mock.calls[0]?.[0].filename.endsWith(".m4a")).toBe(true);
+    expect(files.storedFiles.store.mock.calls[0]?.[0].mimeType).toBe("audio/mp4");
+    expect(sender.sendVoiceMessage).toHaveBeenCalledWith("file_voice", { duration: 2.5, replyToMessageHandle: undefined });
     expect(sender.sendText).not.toHaveBeenCalled();
   });
 });

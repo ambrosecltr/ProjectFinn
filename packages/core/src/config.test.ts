@@ -38,6 +38,23 @@ function setRequiredEnv(overrides: Record<string, string | undefined> = {}): voi
     PARALLEL_BASE_URL: undefined,
     PARALLEL_TIMEOUT_MS: undefined,
     PARALLEL_MAX_RETRIES: undefined,
+    STT_PROVIDER: undefined,
+    TTS_PROVIDER: undefined,
+    IMAGE_PROVIDER: undefined,
+    VIDEO_PROVIDER: undefined,
+    XAI_API_KEY: undefined,
+    XAI_BASE_URL: undefined,
+    XAI_TTS_VOICE_ID: undefined,
+    XAI_TTS_LANGUAGE: undefined,
+    XAI_TTS_OUTPUT_CODEC: undefined,
+    XAI_TTS_SAMPLE_RATE: undefined,
+    XAI_TTS_BIT_RATE: undefined,
+    XAI_STT_LANGUAGE: undefined,
+    XAI_STT_FORMAT: undefined,
+    XAI_IMAGE_MODEL: undefined,
+    XAI_VIDEO_MODEL: undefined,
+    XAI_VIDEO_POLL_INTERVAL_MS: undefined,
+    XAI_VIDEO_POLL_TIMEOUT_MS: undefined,
     SPECTRUM_PROJECT_ID: "spectrum-project",
     SPECTRUM_PROJECT_SECRET: "spectrum-secret",
     PUBLIC_URL: "https://finn.example.com",
@@ -152,6 +169,46 @@ describe("buildCapabilities", () => {
     expect(disabledCapabilities.integrations.web).toBe(false);
     expect(disabledCapabilities.integrations.parallel).toBe(false);
     expect(disabledCapabilities.tools.worker.web_search).toBe(false);
+  });
+
+  it("enables speech and creative capabilities from selected xAI providers", () => {
+    const capabilities = buildCapabilities({
+      models,
+      integrations: { xai: { apiKey: "xai-key" } },
+      speechToTextProvider: "xai",
+      textToSpeechProvider: "xai",
+      imageProvider: "xai",
+      videoProvider: "xai",
+    });
+
+    expect(capabilities.integrations.xai).toBe(true);
+    expect(capabilities.media.speechToText).toBe(true);
+    expect(capabilities.media.textToSpeech).toBe(true);
+    expect(capabilities.media.voiceRoundTrip).toBe(true);
+    expect(capabilities.tools.worker.create_or_edit_image).toBe(true);
+    expect(capabilities.tools.worker.create_or_edit_video).toBe(true);
+  });
+
+  it("respects explicit none providers even when provider keys are configured", () => {
+    const capabilities = buildCapabilities({
+      models,
+      integrations: {
+        fal: { apiKey: "fal-key" },
+        xai: { apiKey: "xai-key" },
+        deepgram: { apiKey: "deepgram-key" },
+        elevenlabs: { apiKey: "elevenlabs-key" },
+      },
+      speechToTextProvider: "none",
+      textToSpeechProvider: "none",
+      imageProvider: "none",
+      videoProvider: "none",
+    });
+
+    expect(capabilities.media.speechToText).toBe(false);
+    expect(capabilities.media.textToSpeech).toBe(false);
+    expect(capabilities.media.voiceRoundTrip).toBe(false);
+    expect(capabilities.tools.worker.create_or_edit_image).toBe(false);
+    expect(capabilities.tools.worker.create_or_edit_video).toBe(false);
   });
 
   it("enables memory search and storage capabilities when Supermemory is selected", () => {
@@ -283,6 +340,56 @@ describe("loadConfig automation intervals", () => {
     setRequiredEnv({ WEB_SEARCH_PROVIDER: "parallel" });
 
     expect(() => loadConfig()).toThrow("PARALLEL_API_KEY");
+  });
+
+  it("loads selected xAI speech and creative provider configuration from env", () => {
+    setRequiredEnv({
+      STT_PROVIDER: "xai",
+      TTS_PROVIDER: "xai",
+      IMAGE_PROVIDER: "xai",
+      VIDEO_PROVIDER: "xai",
+      XAI_API_KEY: "xai-key",
+      XAI_BASE_URL: "https://api.x.ai/v1",
+      XAI_TTS_VOICE_ID: "eve",
+      XAI_TTS_LANGUAGE: "en",
+      XAI_TTS_OUTPUT_CODEC: "wav",
+      XAI_TTS_SAMPLE_RATE: "24000",
+      XAI_IMAGE_MODEL: "grok-imagine-image-quality",
+      XAI_VIDEO_MODEL: "grok-imagine-video",
+      XAI_VIDEO_POLL_INTERVAL_MS: "1000",
+      XAI_VIDEO_POLL_TIMEOUT_MS: "600000",
+    });
+
+    const config = loadConfig();
+
+    expect(config.mediaGeneration).toEqual({
+      speechToTextProvider: "xai",
+      textToSpeechProvider: "xai",
+      imageProvider: "xai",
+      videoProvider: "xai",
+    });
+    expect(config.integrations?.xai).toMatchObject({
+      apiKey: "xai-key",
+      baseUrl: "https://api.x.ai/v1",
+      ttsVoiceId: "eve",
+      ttsLanguage: "en",
+      ttsOutputCodec: "wav",
+      ttsSampleRate: 24_000,
+      imageModel: "grok-imagine-image-quality",
+      videoModel: "grok-imagine-video",
+      videoPollIntervalMs: 1_000,
+      videoPollTimeoutMs: 600_000,
+    });
+    expect(config.capabilities.media.speechToText).toBe(true);
+    expect(config.capabilities.media.textToSpeech).toBe(true);
+    expect(config.capabilities.tools.worker.create_or_edit_image).toBe(true);
+    expect(config.capabilities.tools.worker.create_or_edit_video).toBe(true);
+  });
+
+  it("rejects explicit xAI provider selection without an API key", () => {
+    setRequiredEnv({ STT_PROVIDER: "xai" });
+
+    expect(() => loadConfig()).toThrow("XAI_API_KEY");
   });
 
   it("always scopes Composio to Finn's required mail toolkits by default", () => {

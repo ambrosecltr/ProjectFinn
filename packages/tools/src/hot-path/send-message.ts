@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { getTracer, normalizeOutgoingAssistantText, withSpan } from "@finn/core";
-import { convertAudioToCaf, type ElevenLabsClient } from "@finn/media";
+import { convertAudioToM4a, probeAudioDuration, type TextToSpeechClient } from "@finn/media";
 import type { FilesRuntime } from "@finn/runtime";
 import { z } from "zod";
 
@@ -22,16 +22,17 @@ const outboundDeliveryReceiptInstruction = "This is an outbound delivery receipt
 interface MessageSender {
   sendText(text: string, options?: { replyToMessageHandle?: string }): Promise<unknown> | unknown;
   sendMedia(fileId: string, caption?: string): Promise<void> | void;
-  sendVoiceMessage(fileId: string, options?: { replyToMessageHandle?: string }): Promise<unknown> | unknown;
+  sendVoiceMessage(fileId: string, options?: { duration?: number; replyToMessageHandle?: string }): Promise<unknown> | unknown;
 }
 
 export interface SendMessageToolDeps {
   sender: MessageSender;
   voice?: {
-    elevenlabs: ElevenLabsClient;
+    tts: TextToSpeechClient;
     files: FilesRuntime;
     tempRoot: string;
-    convertAudioToCaf?: (input: Buffer) => Promise<Buffer>;
+    convertAudioToM4a?: (input: Buffer) => Promise<Buffer>;
+    probeAudioDuration?: (input: Buffer) => Promise<number | undefined>;
   };
 }
 
@@ -90,18 +91,22 @@ export function createSendMessageTool(deps: SendMessageToolDeps) {
             throw new Error("Voice replies are not configured.");
           }
 
-          const synthesized = await deps.voice.elevenlabs.synthesize(normalizedText);
-          const cafAudio = deps.voice.convertAudioToCaf
-            ? await deps.voice.convertAudioToCaf(synthesized)
-            : await convertAudioToCaf(synthesized, { tempRoot: deps.voice.tempRoot });
+          const synthesized = await deps.voice.tts.synthesize(normalizedText);
+          const m4aAudio = deps.voice.convertAudioToM4a
+            ? await deps.voice.convertAudioToM4a(synthesized)
+            : await convertAudioToM4a(synthesized, { tempRoot: deps.voice.tempRoot });
+          const duration = deps.voice.probeAudioDuration
+            ? await deps.voice.probeAudioDuration(m4aAudio)
+            : await probeAudioDuration(m4aAudio, { tempRoot: deps.voice.tempRoot });
           const stored = await storedFiles.store({
-            filename: `voice-response-${Date.now()}.caf`,
-            mimeType: "audio/x-caf",
-            data: cafAudio,
+            filename: `voice-response-${Date.now()}.m4a`,
+            mimeType: "audio/mp4",
+            data: m4aAudio,
             origin: "assistant_generated",
           });
 
           const sendResult = await deps.sender.sendVoiceMessage(stored.id, {
+            ...(duration ? { duration } : {}),
             replyToMessageHandle: input.replyToMessageHandle,
           });
 

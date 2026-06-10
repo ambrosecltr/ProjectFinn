@@ -63,6 +63,12 @@ function createConfig(capabilities: AppConfig["capabilities"], overrides: Partia
       thresholdEmergency: 0.95,
     },
     webSearchProvider: overrides.webSearchProvider ?? "auto",
+    mediaGeneration: {
+      speechToTextProvider: "auto",
+      textToSpeechProvider: "auto",
+      imageProvider: "auto",
+      videoProvider: "auto",
+    },
     hotPathIngress: {
       userGroupingWindowMs: 500,
       maxCoalesceMessages: 5,
@@ -124,6 +130,7 @@ function createCapabilities(overrides: {
   exa?: boolean;
   parallel?: boolean;
   fal?: boolean;
+  xai?: boolean;
   composio?: boolean;
   deepgram?: boolean;
   elevenlabs?: boolean;
@@ -136,6 +143,7 @@ function createCapabilities(overrides: {
   const exa = overrides.exa ?? false;
   const parallel = overrides.parallel ?? false;
   const fal = overrides.fal ?? false;
+  const xai = overrides.xai ?? false;
   const composio = overrides.composio ?? false;
   const deepgram = overrides.deepgram ?? false;
   const elevenlabs = overrides.elevenlabs ?? false;
@@ -168,6 +176,7 @@ function createCapabilities(overrides: {
       exa,
       parallel,
       fal,
+      xai,
       composio,
       deepgram,
       elevenlabs,
@@ -215,7 +224,7 @@ describe("buildRuntimeGatingStatus", () => {
   it("surfaces disabled optional integrations and worker tool families", () => {
     const status = buildRuntimeGatingStatus(createConfig(createCapabilities()));
 
-    expect(status.integrations.disabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "hindsight", "honcho", "mem0", "memory", "parallel", "supermemory", "web"]);
+    expect(status.integrations.disabled).toEqual(["composio", "deepgram", "elevenlabs", "exa", "fal", "hindsight", "honcho", "mem0", "memory", "parallel", "supermemory", "web", "xai"]);
     expect(status.media.enabled).toEqual(["fileStorage"]);
     expect(status.media.disabled).toEqual(["speechToText", "textToSpeech", "voiceRoundTrip"]);
     expect(status.configuredToolFamilies.worker.disabled).toEqual([

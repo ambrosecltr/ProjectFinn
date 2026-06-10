@@ -119,7 +119,7 @@ The capability map currently includes:
 
 - `capabilities.boot`: required boot subsystems that are guaranteed present after startup
 - `capabilities.llm`: resolved provider/model per LLM process
-- `capabilities.integrations`: optional integration availability such as the selected web provider (Exa or Parallel), Fal, Composio, Deepgram, ElevenLabs, and the selected memory provider
+- `capabilities.integrations`: optional integration availability such as the selected web provider (Exa or Parallel), creative provider (Fal or xAI), speech providers, Composio, and the selected memory provider
 - `capabilities.tools`: core hot-path and worker tool families that should be visible to LLM runtimes
 
 Runtime gating is intentionally one-directional: missing optional configuration removes the matching integration clients, tools, and prompt instructions instead of exposing fallback tools that fail later. `GET /admin/status` returns both the raw `capabilities` map and a derived `runtimeGating` summary with enabled and disabled integration, media, and tool families for quick inspection.
@@ -131,10 +131,15 @@ Runtime gating is intentionally one-directional: missing optional configuration 
 | `WEB_SEARCH_PROVIDER` | `auto` | selected worker web research provider: `auto`, `exa`, `parallel`, or `none` |
 | `EXA_API_KEY` | unset | Exa-backed worker research tools when selected |
 | `PARALLEL_API_KEY` | unset | Parallel-backed worker research tools when selected |
-| `FAL_API_KEY` | unset | worker image/video tools |
+| `STT_PROVIDER` | `auto` | speech-to-text provider: `auto`, `deepgram`, `xai`, or `none` |
+| `TTS_PROVIDER` | `auto` | text-to-speech provider: `auto`, `elevenlabs`, `xai`, or `none` |
+| `IMAGE_PROVIDER` | `auto` | image generation/editing provider: `auto`, `fal`, `xai`, or `none` |
+| `VIDEO_PROVIDER` | `auto` | video generation/editing provider: `auto`, `fal`, `xai`, or `none` |
+| `FAL_API_KEY` | unset | Fal image/video tools when selected |
+| `XAI_API_KEY` | unset | xAI STT, TTS, image, and video tools when selected |
 | `COMPOSIO_API_KEY` | unset | worker external-service tools and connector-backed Patterns |
-| `DEEPGRAM_API_KEY` | unset | inbound audio transcription |
-| `ELEVENLABS_API_KEY` | unset | hot-path voice replies |
+| `DEEPGRAM_API_KEY` | unset | Deepgram inbound audio transcription when selected |
+| `ELEVENLABS_API_KEY` | unset | ElevenLabs hot-path voice replies when selected |
 | `MEMORY_PROVIDER` | inferred from configured provider, otherwise `none` | selected optional memory provider: `none`, `supermemory`, `hindsight`, `honcho`, or `mem0` |
 | `MEMORY_MODE` | `tools` | hot-path memory behavior: `hybrid`, `context`, or `tools` |
 | `MEMORY_AUTO_RECALL_TIMEOUT_MS` | `3000` | fail-open timeout for hot-path auto-recall (hybrid/context modes) |
@@ -295,12 +300,32 @@ Stored files live inside each user's worker workspace under `files/`.
 
 | Variable | Default |
 |---|---|
+| `IMAGE_PROVIDER` | `auto`; use `fal` to force Fal image generation/editing, or `none` to disable image tools |
+| `VIDEO_PROVIDER` | `auto`; use `fal` to force Fal video generation/editing, or `none` to disable video tools |
 | `FAL_API_KEY` | none |
 | `FAL_IMAGE_GEN_MODEL` | `openai/gpt-image-2` |
 | `FAL_IMAGE_EDIT_MODEL` | `openai/gpt-image-2/edit` |
 | `FAL_VIDEO_GEN_MODEL` | `bytedance/seedance-2.0/text-to-video` |
 | `FAL_IMAGE_TO_VIDEO_MODEL` | `bytedance/seedance-2.0/image-to-video` |
 | `FAL_VIDEO_EDIT_MODEL` | `bytedance/seedance-2.0/reference-to-video` |
+
+### xAI
+
+| Variable | Default |
+|---|---|
+| `XAI_API_KEY` | none |
+| `XAI_BASE_URL` | `https://api.x.ai/v1` |
+| `XAI_TTS_VOICE_ID` | `eve` |
+| `XAI_TTS_LANGUAGE` | `en` |
+| `XAI_TTS_OUTPUT_CODEC` | `mp3`; one of `mp3`, `wav`, `pcm`, `mulaw`, or `alaw` |
+| `XAI_TTS_SAMPLE_RATE` | provider default |
+| `XAI_TTS_BIT_RATE` | provider default |
+| `XAI_STT_LANGUAGE` | `en` |
+| `XAI_STT_FORMAT` | `true` |
+| `XAI_IMAGE_MODEL` | `grok-imagine-image-quality` |
+| `XAI_VIDEO_MODEL` | `grok-imagine-video` |
+| `XAI_VIDEO_POLL_INTERVAL_MS` | `5000` |
+| `XAI_VIDEO_POLL_TIMEOUT_MS` | `600000` |
 
 ### Composio
 
@@ -315,8 +340,10 @@ Stored files live inside each user's worker workspace under `files/`.
 
 | Variable | Purpose |
 |---|---|
-| `DEEPGRAM_API_KEY` | speech-to-text |
-| `ELEVENLABS_API_KEY` | text-to-speech |
+| `STT_PROVIDER` | selected speech-to-text provider: `auto`, `deepgram`, `xai`, or `none` |
+| `TTS_PROVIDER` | selected text-to-speech provider: `auto`, `elevenlabs`, `xai`, or `none` |
+| `DEEPGRAM_API_KEY` | Deepgram speech-to-text |
+| `ELEVENLABS_API_KEY` | ElevenLabs text-to-speech |
 | `ELEVENLABS_VOICE_ID` | target voice |
 | `ELEVENLABS_MODEL_ID` | defaults to `eleven_turbo_v2_5` |
 

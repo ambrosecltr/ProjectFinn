@@ -5,6 +5,7 @@ import {
   canExposeVoiceReplyTool,
   resolveUserRuntimeRoot,
   resolveWorkerWorkspaceRoot,
+  shouldConvertInboundAudioToWav,
   UserRuntimeRegistry,
 } from "./user-runtime.js";
 import { UserRegistry } from "./user-registry.js";
@@ -18,6 +19,14 @@ describe("canExposeVoiceReplyTool", () => {
 
     expect(canExposeVoiceReplyTool({ textToSpeechAvailable: false, hasTextToSpeechClient: true })).toBe(false);
     expect(canExposeVoiceReplyTool({ textToSpeechAvailable: true, hasTextToSpeechClient: false })).toBe(false);
+  });
+});
+
+describe("shouldConvertInboundAudioToWav", () => {
+  it("converts iMessage CAF audio before STT provider calls", () => {
+    expect(shouldConvertInboundAudioToWav({ mimeType: "audio/x-caf" })).toBe(true);
+    expect(shouldConvertInboundAudioToWav({ mimeType: "audio/wav" })).toBe(false);
+    expect(shouldConvertInboundAudioToWav({ mimeType: "audio/mpeg" })).toBe(false);
   });
 });
 

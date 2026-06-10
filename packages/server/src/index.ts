@@ -1,5 +1,13 @@
 import "@finn/core/otel-bootstrap";
-import { EventBus, createLogger, loadConfig, type PatternRecord, type UserContext } from "@finn/core";
+import {
+  EventBus,
+  createLogger,
+  loadConfig,
+  resolveConfiguredSpeechToTextProvider,
+  resolveConfiguredTextToSpeechProvider,
+  type PatternRecord,
+  type UserContext,
+} from "@finn/core";
 import { getDb } from "@finn/db";
 import { PatternScheduler, PatternStore } from "@finn/patterns";
 import { createIntegrationClients } from "@finn/integrations";
@@ -7,6 +15,9 @@ import { LLMManager } from "@finn/llm";
 import {
   DeepgramClient,
   ElevenLabsClient,
+  XaiMediaClient,
+  type SpeechToTextClient,
+  type TextToSpeechClient,
 } from "@finn/media";
 import { MessageRouter, SpectrumClient } from "@finn/messaging";
 import { Hono } from "hono";
@@ -160,19 +171,51 @@ const server = await (async () => {
     // Voice & media clients (optional — only initialized when keys present)
     // -----------------------------------------------------------------------
 
-    const deepgramApiKey = config.integrations?.deepgram?.apiKey;
-    const deepgramClient = deepgramApiKey
+    const selectedSpeechToTextProvider = resolveConfiguredSpeechToTextProvider({
+      requested: config.mediaGeneration.speechToTextProvider,
+      integrations: config.integrations ?? {},
+    });
+    const selectedTextToSpeechProvider = resolveConfiguredTextToSpeechProvider({
+      requested: config.mediaGeneration.textToSpeechProvider,
+      integrations: config.integrations ?? {},
+    });
+
+    const deepgramApiKey = selectedSpeechToTextProvider === "deepgram"
+      ? config.integrations?.deepgram?.apiKey
+      : undefined;
+    const deepgramClient: SpeechToTextClient | undefined = deepgramApiKey
       ? new DeepgramClient({ apiKey: deepgramApiKey })
       : undefined;
 
-    const elevenlabsApiKey = config.integrations?.elevenlabs?.apiKey;
-    const elevenlabsClient = elevenlabsApiKey
+    const elevenlabsApiKey = selectedTextToSpeechProvider === "elevenlabs"
+      ? config.integrations?.elevenlabs?.apiKey
+      : undefined;
+    const elevenlabsClient: TextToSpeechClient | undefined = elevenlabsApiKey
       ? new ElevenLabsClient({
           apiKey: elevenlabsApiKey,
           voiceId: config.integrations?.elevenlabs?.voiceId,
           modelId: config.integrations?.elevenlabs?.modelId,
         })
       : undefined;
+    const xaiMediaClient = config.integrations?.xai?.apiKey
+      ? new XaiMediaClient({
+          apiKey: config.integrations.xai.apiKey,
+          baseUrl: config.integrations.xai.baseUrl,
+          ttsVoiceId: config.integrations.xai.ttsVoiceId,
+          ttsLanguage: config.integrations.xai.ttsLanguage,
+          ttsOutputCodec: config.integrations.xai.ttsOutputCodec,
+          ttsSampleRate: config.integrations.xai.ttsSampleRate,
+          ttsBitRate: config.integrations.xai.ttsBitRate,
+          sttLanguage: config.integrations.xai.sttLanguage,
+          sttFormat: config.integrations.xai.sttFormat,
+        })
+      : undefined;
+    const speechToTextClient = selectedSpeechToTextProvider === "xai"
+      ? xaiMediaClient
+      : deepgramClient;
+    const textToSpeechClient = selectedTextToSpeechProvider === "xai"
+      ? xaiMediaClient
+      : elevenlabsClient;
 
     const puterBridge = new PuterBridge();
 
@@ -185,8 +228,8 @@ const server = await (async () => {
       integrations: integrationClients,
       userRegistry,
       puterBridge,
-      deepgramClient,
-      elevenlabsClient,
+      speechToTextClient,
+      textToSpeechClient,
     }));
 
     await userRegistry.ensureAllowedUsers();
