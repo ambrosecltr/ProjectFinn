@@ -17,14 +17,23 @@ import { XaiImagineClient } from "./xai.js";
 
 const logger = createLogger("integrations");
 
-type CreativeImageClient = Pick<FalClient | XaiImagineClient, "generateImage" | "editImage">;
-type CreativeVideoClient = Pick<FalClient | XaiImagineClient, "generateVideo" | "imageToVideo" | "editVideo">;
+type CreativeImageClient = Pick<FalClient | XaiImagineClient, "capabilities" | "generateImage" | "editImage">;
+type CreativeVideoClient = Pick<FalClient | XaiImagineClient, "capabilities" | "generateVideo" | "imageToVideo" | "editVideo">;
 
 function createCreativeRouter(input: {
   image?: CreativeImageClient;
   video?: CreativeVideoClient;
 }) {
   return {
+    capabilities: {
+      image: input.image?.capabilities.image ?? {
+        outputFormats: ["jpeg", "png", "webp"] as const,
+        maxReferenceImages: 4,
+      },
+      video: input.video?.capabilities.video ?? {
+        maxReferenceImages: 4,
+      },
+    },
     generateImage: (options: Parameters<CreativeImageClient["generateImage"]>[0]) => {
       if (!input.image) {
         throw new Error("Creative image generation is not configured.");

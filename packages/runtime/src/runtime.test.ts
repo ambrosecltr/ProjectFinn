@@ -49,8 +49,8 @@ function createStoredFile(id: string, filename: string, mimeType: string, size =
   };
 }
 
-function createStoredFilesRuntime(options: { listStoredFiles?: boolean } = {}): { runtime: FilesRuntime; storedInputs: Array<{ filename: string; mimeType: string; userVisible?: boolean; origin?: string }> } {
-  const storedInputs: Array<{ filename: string; mimeType: string; userVisible?: boolean; origin?: string }> = [];
+function createStoredFilesRuntime(options: { listStoredFiles?: boolean } = {}): { runtime: FilesRuntime; storedInputs: Array<{ filename: string; mimeType: string; data: Buffer; userVisible?: boolean; origin?: string }> } {
+  const storedInputs: Array<{ filename: string; mimeType: string; data: Buffer; userVisible?: boolean; origin?: string }> = [];
   const workspace = createWorkspace();
   const listedFile = {
     ...createStoredFile("file_listed", "listed.txt", "text/plain", 6),
@@ -73,6 +73,7 @@ function createStoredFilesRuntime(options: { listStoredFiles?: boolean } = {}): 
           storedInputs.push({
             filename: input.filename,
             mimeType: input.mimeType,
+            data: Buffer.from(input.data),
             userVisible: input.userVisible,
             origin: input.origin,
           });
@@ -618,6 +619,41 @@ describe("runtime service builders", () => {
     });
   });
 
+  it("stores generated creative data URLs through the files runtime", async () => {
+    const { runtime: files, storedInputs } = createStoredFilesRuntime();
+    const client: CreativeRuntimeClient = {
+      generateImage: mock(async () => [{
+        url: "data:image/jpeg;base64,Z2VuZXJhdGVk",
+        contentType: "image/jpeg",
+      }]),
+      editImage: mock(async () => []),
+      generateVideo: mock(async () => ({ url: "https://93.184.216.34/video.mp4", contentType: "video/mp4" })),
+      imageToVideo: mock(async () => ({ url: "https://93.184.216.34/video.mp4", contentType: "video/mp4" })),
+      editVideo: mock(async () => ({ url: "https://93.184.216.34/video.mp4", contentType: "video/mp4" })),
+    };
+    const creative = createCreativeRuntimeService({ client, files });
+
+    const result = await creative.createOrEditImage({ prompt: "make one", outputFormat: "jpeg" });
+
+    expect(result).toMatchObject({
+      fileIds: ["file_generated_1"],
+      images: [{
+        fileId: "file_generated_1",
+        url: "https://app.test/files/tenant_test/usr_test/file_generated_1",
+        remoteUrl: "data:image/jpeg;base64,<omitted>",
+        contentType: "image/jpeg",
+      }],
+      storedLocally: true,
+    });
+    expect(storedInputs[0]).toMatchObject({
+      filename: expect.stringMatching(/generated-image-\d+-1\.jpg/),
+      mimeType: "image/jpeg",
+      data: Buffer.from("generated"),
+      userVisible: true,
+      origin: "assistant_generated",
+    });
+  });
+
   it("accepts /workspace media references for creative tools", async () => {
     const { runtime: files } = createStoredFilesRuntime();
     mkdirSync(join(files.workspaceRoot, "tmp"), { recursive: true });
@@ -642,6 +678,40 @@ describe("runtime service builders", () => {
       filename: "source.png",
       mimeType: "image/png",
     });
+  });
+
+  it("passes reference images to text-to-video generation", async () => {
+    const { runtime: files } = createStoredFilesRuntime();
+    const client: CreativeRuntimeClient = {
+      uploadMedia: mock(async () => "https://fal.upload/reference.png"),
+      generateImage: mock(async () => []),
+      editImage: mock(async () => []),
+      generateVideo: mock(async () => ({ url: "https://93.184.216.34/video.mp4", contentType: "video/mp4" })),
+      imageToVideo: mock(async () => ({ url: "https://93.184.216.34/video.mp4", contentType: "video/mp4" })),
+      editVideo: mock(async () => ({ url: "https://93.184.216.34/video.mp4", contentType: "video/mp4" })),
+    };
+    const creative = createCreativeRuntimeService({
+      client,
+      files,
+      fetchRemote: mock(async () => new Response(Buffer.from("video"))),
+    });
+
+    await creative.createOrEditVideo({
+      prompt: "make a product reveal",
+      referenceImages: [{ fileId: "file_reference" }],
+      duration: "5",
+    });
+
+    expect(client.generateVideo).toHaveBeenCalledWith({
+      prompt: "make a product reveal",
+      imageUrls: ["https://fal.upload/reference.png"],
+      resolution: undefined,
+      duration: "5",
+      aspectRatio: undefined,
+      generateAudio: undefined,
+    });
+    expect(client.imageToVideo).not.toHaveBeenCalled();
+    expect(client.editVideo).not.toHaveBeenCalled();
   });
 
   it("rejects /tmp media references for creative tools", async () => {

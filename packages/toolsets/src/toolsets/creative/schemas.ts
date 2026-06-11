@@ -1,5 +1,7 @@
 import { z } from "zod";
-import type { CreativeImageSize } from "@finn/runtime";
+import type { CreativeImageFormat, CreativeImageSize } from "@finn/runtime";
+
+const defaultImageOutputFormats = ["jpeg", "png", "webp"] as const satisfies readonly CreativeImageFormat[];
 
 const booleanFlagSchema = z.preprocess((value) => {
   if (value === "true" || value === true) {
@@ -83,33 +85,51 @@ const mediaReferenceSchema = z.preprocess(parseMediaReference, z.object({
   message: "Provide exactly one of fileId, path, or mediaUrl.",
 }));
 
-const mediaReferenceListSchema = z.preprocess(
-  parseMediaReferenceList,
-  z.array(mediaReferenceSchema).max(4),
-);
+function createMediaReferenceListSchema(maxReferences: number) {
+  return z.preprocess(
+    parseMediaReferenceList,
+    z.array(mediaReferenceSchema).max(maxReferences),
+  );
+}
 
-export const creativeImageInputSchema = z.object({
-  prompt: z.string().trim().min(1),
-  images: mediaReferenceListSchema.optional().describe("Optional references as JSON array or selector list, e.g. file:file_1|path:/workspace/source.png|url:https://example.com/image.png. Use /workspace paths for files; VM /tmp scratch is not accepted as a creative reference."),
-  imageSize: imageSizeSchema.optional(),
-  numImages: z.coerce.number().int().min(1).max(4).optional(),
-  quality: z.enum(["low", "medium", "high"]).optional(),
-  outputFormat: z.enum(["jpeg", "png", "webp"]).optional(),
-}).strict();
+function uniqueImageOutputFormats(values: readonly CreativeImageFormat[] | undefined): [CreativeImageFormat, ...CreativeImageFormat[]] {
+  const formats = [...new Set(values?.length ? values : defaultImageOutputFormats)]
+    .filter((value): value is CreativeImageFormat => value === "jpeg" || value === "png" || value === "webp");
+  return (formats.length > 0 ? formats : [...defaultImageOutputFormats]) as [CreativeImageFormat, ...CreativeImageFormat[]];
+}
 
-export const creativeVideoInputSchema = z.object({
-  prompt: z.string().trim().min(1),
-  image: mediaReferenceSchema.optional().describe("Optional image reference as JSON or selector, e.g. file:file_1, path:/workspace/source.png, or url:https://example.com/source.png. Use /workspace paths for files; VM /tmp scratch is not accepted as a creative reference."),
-  video: mediaReferenceSchema.optional().describe("Optional video reference as JSON or selector, e.g. file:file_1, path:/workspace/source.mp4, or url:https://example.com/source.mp4. Use /workspace paths for files; VM /tmp scratch is not accepted as a creative reference."),
-  referenceImages: mediaReferenceListSchema.optional().describe("Optional edit references as JSON array or selector list separated with |."),
-  resolution: z.enum(["480p", "720p"]).optional(),
-  duration: z.enum(["auto", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"]).optional(),
-  aspectRatio: z.enum(["auto", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]).optional(),
-  generateAudio: booleanFlagSchema.optional(),
-}).strict().refine((value) => !(value.image && value.video), {
-  message: "Provide either image or video, not both.",
-  path: ["video"],
-});
+export function createCreativeImageInputSchema(options: {
+  outputFormats?: readonly CreativeImageFormat[];
+  maxReferenceImages?: number;
+} = {}) {
+  return z.object({
+    prompt: z.string().trim().min(1),
+    images: createMediaReferenceListSchema(options.maxReferenceImages ?? 4).optional().describe("Optional references as JSON array or selector list, e.g. file:file_1|path:/workspace/source.png|url:https://example.com/image.png. Use /workspace paths for files; VM /tmp scratch is not accepted as a creative reference."),
+    imageSize: imageSizeSchema.optional(),
+    numImages: z.coerce.number().int().min(1).max(4).optional(),
+    quality: z.enum(["low", "medium", "high"]).optional(),
+    outputFormat: z.enum(uniqueImageOutputFormats(options.outputFormats)).optional(),
+  }).strict();
+}
+
+export function createCreativeVideoInputSchema(options: { maxReferenceImages?: number } = {}) {
+  return z.object({
+    prompt: z.string().trim().min(1),
+    image: mediaReferenceSchema.optional().describe("Optional image reference as JSON or selector, e.g. file:file_1, path:/workspace/source.png, or url:https://example.com/source.png. Use /workspace paths for files; VM /tmp scratch is not accepted as a creative reference."),
+    video: mediaReferenceSchema.optional().describe("Optional video reference as JSON or selector, e.g. file:file_1, path:/workspace/source.mp4, or url:https://example.com/source.mp4. Use /workspace paths for files; VM /tmp scratch is not accepted as a creative reference."),
+    referenceImages: createMediaReferenceListSchema(options.maxReferenceImages ?? 4).optional().describe("Optional edit references as JSON array or selector list separated with |."),
+    resolution: z.enum(["480p", "720p"]).optional(),
+    duration: z.enum(["auto", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"]).optional(),
+    aspectRatio: z.enum(["auto", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]).optional(),
+    generateAudio: booleanFlagSchema.optional(),
+  }).strict().refine((value) => !(value.image && value.video), {
+    message: "Provide either image or video, not both.",
+    path: ["video"],
+  });
+}
+
+export const creativeImageInputSchema = createCreativeImageInputSchema();
+export const creativeVideoInputSchema = createCreativeVideoInputSchema();
 
 export type CreativeImageInput = z.infer<typeof creativeImageInputSchema>;
 export type CreativeVideoInput = z.infer<typeof creativeVideoInputSchema>;

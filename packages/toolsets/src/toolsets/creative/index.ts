@@ -12,7 +12,7 @@ export interface CreativeToolsetDefinitionOptions {
 
 export type { CreativeManifestOptions } from "./manifest.js";
 export { createCreativeManifest } from "./manifest.js";
-export { creativeImageInputSchema, creativeVideoInputSchema } from "./schemas.js";
+export { createCreativeImageInputSchema, createCreativeVideoInputSchema, creativeImageInputSchema, creativeVideoInputSchema } from "./schemas.js";
 export type { CreativeImageInput, CreativeVideoInput } from "./schemas.js";
 export { creativeImageCommand, creativeVideoCommand, executeCreativeCommand } from "./operations.js";
 
@@ -21,6 +21,7 @@ export function createCreativeToolsetDefinition(options: CreativeToolsetDefiniti
     processTypes: options.processTypes,
     image: options.image,
     video: options.video,
+    capabilities: options.runtime.capabilities,
   });
 
   return {

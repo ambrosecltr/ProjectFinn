@@ -6,6 +6,15 @@ import { createCreativeToolsetDefinition } from "./index.js";
 function createCreativeRuntime(): CreativeRuntimeService {
   return {
     kind: "finn-creative-runtime",
+    capabilities: {
+      image: {
+        outputFormats: ["jpeg", "png", "webp"],
+        maxReferenceImages: 4,
+      },
+      video: {
+        maxReferenceImages: 4,
+      },
+    },
     createOrEditImage: mock(async () => ({
       fileIds: ["file_image"],
       images: [{
@@ -122,5 +131,37 @@ describe("creative toolset", () => {
     expect(loaded.instructions).toContain("API: finn.creative.image(input)");
     expect(loaded.instructions).toContain("images is optional");
     expect(loaded.instructions).not.toContain("finn.creative.video");
+  });
+
+  it("narrows image output formats from runtime capabilities", async () => {
+    const creative = {
+      ...createCreativeRuntime(),
+      capabilities: {
+        image: {
+          outputFormats: ["jpeg"] as const,
+          maxReferenceImages: 3,
+        },
+        video: {
+          maxReferenceImages: 7,
+        },
+      },
+    };
+    const { runtime } = createRuntime(creative);
+
+    const loaded = await runtime.load("creative");
+
+    expect(loaded.instructions).toContain("outputFormat accepts: jpeg.");
+    expect(loaded.instructions).toContain('outputFormat: "jpeg"');
+    expect(loaded.instructions).not.toContain('outputFormat: "png"');
+
+    await expect(runtime.execute({
+      toolset: "creative",
+      command: "image",
+      args: {
+        prompt: "paint this brighter",
+        outputFormat: "png",
+      },
+    })).rejects.toThrow("Invalid enum value");
+    expect(creative.createOrEditImage).not.toHaveBeenCalled();
   });
 });

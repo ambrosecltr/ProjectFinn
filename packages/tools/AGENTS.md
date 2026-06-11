@@ -53,6 +53,8 @@ Secure Exec is a JavaScript sandbox, not a shell. Do not expose host child proce
 
 Use `packages/toolsets/src/` when a runtime should expose a compact, searchable Finn API namespace rather than many native tools. Toolsets must define schemas, effects, process availability, and executors, then be gated by the owning runtime/connector policy before reaching Finn JS workspace.
 
+Creative toolsets must preserve provider capabilities from the integration router through `CreativeRuntimeService` into the manifest schema and executor validation. `workspace_search` should show only supported arguments for the selected provider: xAI image output is JPEG-only, while Fal image output supports JPEG, PNG, and WebP. Store generated media through the files runtime whenever possible, including provider temporary URLs and base64 data URLs.
+
 Puter toolsets must use live paired Mac commands in production. The local-record executor path exists for tests only; do not build product behavior around batch-uploaded local records.
 
 Puter iMessage results should mirror what the paired user can see in Messages. Exclude archived/deleted/recoverable rows, preserve Apple `message.is_from_me` as `metadata.isFromMe`, and normalize sent rows to `sender: "me"` plus `metadata.localUser: true`; never hardcode a user's name, email, or phone number to decide local identity.

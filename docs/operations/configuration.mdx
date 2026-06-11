@@ -313,6 +313,8 @@ Stored files live inside each user's worker workspace under `files/`.
 
 `auto` preserves existing behavior by preferring Fal when `FAL_API_KEY` is set and falling back to xAI when only `XAI_API_KEY` is available. Image and video providers resolve independently, so mixed Fal/xAI configurations are allowed.
 
+Worker-facing `finn.creative.*` schemas are generated from the selected provider capabilities. Fal image tools expose `jpeg`, `png`, and `webp` output formats. xAI image tools expose JPEG only; do not configure prompts, examples, or tests that suggest PNG/WebP output when `IMAGE_PROVIDER=xai`. Finn stores generated provider media immediately, including temporary HTTP URLs and base64 data URLs returned by providers.
+
 ### xAI
 
 | Variable | Default |

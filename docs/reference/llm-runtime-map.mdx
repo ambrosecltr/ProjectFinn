@@ -294,7 +294,7 @@ Finn does not expose optional tools based on prompt text alone. Tool exposure is
 Important derived booleans are:
 
 - The selected web provider (`WEB_SEARCH_PROVIDER=auto|exa|parallel|none`) plus its API key enables the worker Finn JS workspace `web` API.
-- A selected Fal or xAI creative provider enables the worker Finn JS workspace `creative` API.
+- A selected Fal or xAI creative provider enables the worker Finn JS workspace `creative` API. The exposed creative schema is generated from the selected provider capabilities; xAI image output is JPEG-only, while Fal image output supports JPEG, PNG, and WebP.
 - Composio API key enables worker Composio runtime tools.
 - selected memory provider configuration enables worker user/Pattern memory search and asynchronous handled-turn/Pattern outcome storage. `MEMORY_MODE=hybrid|tools` may also expose hot-path `search_memory`, and providers that implement memory reflection, currently Hindsight and Honcho, may expose `reflect_memory` in those modes. Mem0 is search/context only. `MEMORY_MODE=context` hides hot-path memory tools and relies on compact auto-recall injection instead.
 - A selected TTS provider, currently ElevenLabs or xAI, enables text-to-speech capability.

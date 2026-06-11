@@ -18,6 +18,30 @@ export type CreativeVideoResolution = "480p" | "720p";
 export type CreativeVideoDuration = "auto" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "11" | "12" | "13" | "14" | "15";
 export type CreativeVideoAspectRatio = "auto" | "21:9" | "16:9" | "4:3" | "1:1" | "3:4" | "9:16";
 
+export interface CreativeImageCapabilities {
+  outputFormats: readonly CreativeImageFormat[];
+  maxReferenceImages: number;
+}
+
+export interface CreativeVideoCapabilities {
+  maxReferenceImages: number;
+}
+
+export interface CreativeRuntimeCapabilities {
+  image: CreativeImageCapabilities;
+  video: CreativeVideoCapabilities;
+}
+
+export const defaultCreativeRuntimeCapabilities: CreativeRuntimeCapabilities = {
+  image: {
+    outputFormats: ["jpeg", "png", "webp"],
+    maxReferenceImages: 4,
+  },
+  video: {
+    maxReferenceImages: 4,
+  },
+};
+
 export interface CreativeMediaReference {
   fileId?: string;
   path?: string;
@@ -57,6 +81,7 @@ export interface CreativeGeneratedVideo {
 }
 
 export interface CreativeRuntimeClient {
+  readonly capabilities?: Partial<CreativeRuntimeCapabilities>;
   uploadMedia?(input: {
     data: Buffer;
     filename: string;
@@ -79,6 +104,7 @@ export interface CreativeRuntimeClient {
   }): Promise<CreativeGeneratedImage[]>;
   generateVideo(options: {
     prompt: string;
+    imageUrls?: string[];
     duration?: CreativeVideoDuration;
     resolution?: CreativeVideoResolution;
     aspectRatio?: CreativeVideoAspectRatio;
@@ -137,6 +163,7 @@ export interface CreativeVideoResult {
 
 export interface CreativeRuntimeService {
   readonly kind: "finn-creative-runtime";
+  readonly capabilities: CreativeRuntimeCapabilities;
   createOrEditImage(input: CreativeImageInput): Promise<CreativeImageResult>;
   createOrEditVideo(input: CreativeVideoInput): Promise<CreativeVideoResult>;
 }
@@ -161,6 +188,12 @@ type StoredRemoteFile = {
   localUrl?: string;
 };
 
+type DataUrlMedia = {
+  data: Buffer;
+  mimeType: string;
+  resultUrl: string;
+};
+
 const maxRemoteMediaRedirects = 5;
 const remoteMediaRedirectStatuses = new Set([301, 302, 303, 307, 308]);
 const remoteMediaUrlSafetyMessages = {
@@ -170,6 +203,31 @@ const remoteMediaUrlSafetyMessages = {
 };
 const workspaceMountPath = "/workspace";
 const tmpMountPath = "/tmp";
+const dataUrlPattern = /^data:([^;,]+)?(;base64)?,(.*)$/is;
+
+function uniqueImageFormats(values: readonly CreativeImageFormat[]): CreativeImageFormat[] {
+  const seen = new Set<CreativeImageFormat>();
+  for (const value of values) {
+    if (value === "jpeg" || value === "png" || value === "webp") {
+      seen.add(value);
+    }
+  }
+  return [...seen];
+}
+
+function normalizeCreativeCapabilities(capabilities: Partial<CreativeRuntimeCapabilities> | undefined): CreativeRuntimeCapabilities {
+  const outputFormats = uniqueImageFormats(capabilities?.image?.outputFormats ?? defaultCreativeRuntimeCapabilities.image.outputFormats);
+
+  return {
+    image: {
+      outputFormats: outputFormats.length > 0 ? outputFormats : [...defaultCreativeRuntimeCapabilities.image.outputFormats],
+      maxReferenceImages: capabilities?.image?.maxReferenceImages ?? defaultCreativeRuntimeCapabilities.image.maxReferenceImages,
+    },
+    video: {
+      maxReferenceImages: capabilities?.video?.maxReferenceImages ?? defaultCreativeRuntimeCapabilities.video.maxReferenceImages,
+    },
+  };
+}
 
 function getExtension(contentType: string, fallback: string): string {
   switch (contentType) {
@@ -255,6 +313,23 @@ async function fetchSafeRemoteMedia(fetchRemote: CreativeFetch | undefined, valu
   }
 
   return { response, safeUrl };
+}
+
+function parseDataUrl(value: string): DataUrlMedia | null {
+  const match = dataUrlPattern.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const mimeType = match[1]?.trim() || "application/octet-stream";
+  const body = match[3] ?? "";
+  const data = match[2] ? Buffer.from(body.replace(/\s+/g, ""), "base64") : Buffer.from(decodeURIComponent(body));
+
+  return {
+    data,
+    mimeType,
+    resultUrl: `data:${mimeType}${match[2] ?? ""},<omitted>`,
+  };
 }
 
 function assertPathInsideWorkspace(workspaceRoot: string, path: string): string {
@@ -402,6 +477,23 @@ async function storeRemoteFile(
     return null;
   }
 
+  const dataUrl = parseDataUrl(url);
+  if (dataUrl) {
+    const stored = await files.storedFiles.store({
+      filename,
+      mimeType: dataUrl.mimeType || mimeType,
+      data: dataUrl.data,
+      userVisible: true,
+      origin: "assistant_generated",
+    });
+
+    return {
+      fileId: stored.id,
+      remoteUrl: dataUrl.resultUrl,
+      ...(files.storedFiles.urlFor ? { localUrl: files.storedFiles.urlFor(stored as StoredFileUrlOwner) } : {}),
+    };
+  }
+
   const { response, safeUrl } = await fetchSafeRemoteMedia(fetchRemote, url);
   if (!response.ok) {
     throw new Error(`Failed to fetch generated file: ${response.status} ${response.statusText}`);
@@ -430,7 +522,7 @@ function buildStoredImageResult(
   return {
     fileId: stored?.fileId ?? null,
     url: stored?.localUrl ?? image.url,
-    remoteUrl: image.url,
+    remoteUrl: stored?.remoteUrl ?? image.url,
     contentType: image.contentType,
     ...(image.width !== undefined ? { width: image.width } : {}),
     ...(image.height !== undefined ? { height: image.height } : {}),
@@ -444,7 +536,7 @@ function buildStoredVideoResult(
   return {
     fileId: stored?.fileId ?? null,
     url: stored?.localUrl ?? video.url,
-    remoteUrl: video.url,
+    remoteUrl: stored?.remoteUrl ?? video.url,
     contentType: video.contentType,
   };
 }
@@ -504,9 +596,11 @@ async function storeVideo(
 
 export function createCreativeRuntimeService(options: CreativeRuntimeServiceOptions): CreativeRuntimeService {
   const fetchRemote = options.fetchRemote;
+  const capabilities = normalizeCreativeCapabilities(options.client.capabilities);
 
   return {
     kind: "finn-creative-runtime",
+    capabilities,
     async createOrEditImage(input) {
       const imageUrls = await resolveMediaUrls(options.client, input.images, options.files);
       const generatedImages = imageUrls.length > 0
@@ -534,6 +628,10 @@ export function createCreativeRuntimeService(options: CreativeRuntimeServiceOpti
       );
     },
     async createOrEditVideo(input) {
+      if (input.image && input.referenceImages?.length) {
+        throw new Error("referenceImages cannot be combined with image; use image for image-to-video or referenceImages for reference-to-video.");
+      }
+
       const commonOptions = {
         prompt: input.prompt,
         resolution: input.resolution,
@@ -541,6 +639,9 @@ export function createCreativeRuntimeService(options: CreativeRuntimeServiceOpti
         aspectRatio: input.aspectRatio,
         generateAudio: input.generateAudio,
       };
+      const referenceImageUrls = input.referenceImages?.length
+        ? await resolveMediaUrls(options.client, input.referenceImages, options.files)
+        : undefined;
       const generatedVideo = input.image
         ? await options.client.imageToVideo({
             ...commonOptions,
@@ -550,11 +651,12 @@ export function createCreativeRuntimeService(options: CreativeRuntimeServiceOpti
           ? await options.client.editVideo({
               ...commonOptions,
               videoUrl: await resolveMediaUrl(options.client, input.video, options.files),
-              imageUrls: input.referenceImages?.length
-                ? await resolveMediaUrls(options.client, input.referenceImages, options.files)
-                : undefined,
+              imageUrls: referenceImageUrls,
             })
-          : await options.client.generateVideo(commonOptions);
+          : await options.client.generateVideo({
+              ...commonOptions,
+              imageUrls: referenceImageUrls,
+            });
 
       return storeVideo(
         options.files,

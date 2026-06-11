@@ -65,6 +65,10 @@ When a creative provider is configured, workers can:
 
 Finn currently supports Fal and xAI as creative backends. `IMAGE_PROVIDER` and `VIDEO_PROVIDER` can select different providers, and the worker runtime exposes them through the same provider-neutral `finn.creative.*` workspace APIs. In `auto` mode, Finn prefers Fal when configured and falls back to xAI.
 
+The creative API is provider-neutral, but the generated worker schema and examples are provider-capability-aware for the selected runtime. Fal image generation supports `jpeg`, `png`, and `webp` output formats. xAI image generation/editing is exposed as JPEG-only, so workers should not pass PNG or WebP when xAI is the selected image provider. Generated assets may come back as temporary HTTP URLs or provider base64 data; Finn stores them immediately as user-visible Finn files before surfacing them.
+
+For video generation, `referenceImages` can guide reference-to-video/text-to-video when the selected backend supports it. Use `image` for image-to-video, `video` for video edits, and avoid combining `image` with `referenceImages`.
+
 Generated outputs are downloaded, stored locally, and returned with file ids so the hot path can deliver the actual asset back to the user.
 
 When a generated or edited asset is meant for the user, workers should keep it visible in Library. Intermediate analysis files should stay hidden.

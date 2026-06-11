@@ -9,6 +9,8 @@ const DEFAULT_IMAGE_EDIT_MODEL = "openai/gpt-image-2/edit";
 const DEFAULT_VIDEO_MODEL = "bytedance/seedance-2.0/text-to-video";
 const DEFAULT_IMAGE_TO_VIDEO_MODEL = "bytedance/seedance-2.0/image-to-video";
 const DEFAULT_VIDEO_EDIT_MODEL = "bytedance/seedance-2.0/reference-to-video";
+const MAX_IMAGE_REFERENCES = 4;
+const MAX_VIDEO_REFERENCE_IMAGES = 9;
 
 export type FalImageSize =
   | "square_hd"
@@ -19,6 +21,7 @@ export type FalImageSize =
   | "landscape_16_9"
   | "auto"
   | `${number}x${number}`;
+type FalImageSizeInput = Exclude<FalImageSize, `${number}x${number}`> | { width: number; height: number };
 
 export type FalImageQuality = "low" | "medium" | "high";
 export type FalImageFormat = "jpeg" | "png" | "webp";
@@ -51,6 +54,7 @@ export type FalEditImageOptions = {
 
 export type FalGenerateVideoOptions = {
   prompt: string;
+  imageUrls?: string[];
   duration?: FalVideoDuration;
   resolution?: FalVideoResolution;
   aspectRatio?: FalVideoAspectRatio;
@@ -122,19 +126,48 @@ function getErrorMessage(error: unknown): string {
   return "FAL request failed";
 }
 
+function mapImageSize(imageSize: FalImageSize | undefined): FalImageSizeInput | undefined {
+  if (!imageSize) {
+    return undefined;
+  }
+  const match = /^(\d+)x(\d+)$/.exec(imageSize);
+  if (!match) {
+    return imageSize as Exclude<FalImageSize, `${number}x${number}`>;
+  }
+
+  return {
+    width: Number(match[1]),
+    height: Number(match[2]),
+  };
+}
+
+function contentTypeFromUrl(value: string, fallback: string): string {
+  try {
+    const pathname = new URL(value).pathname.toLowerCase();
+    if (pathname.endsWith(".png")) return "image/png";
+    if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+    if (pathname.endsWith(".webp")) return "image/webp";
+    if (pathname.endsWith(".mp4")) return "video/mp4";
+    if (pathname.endsWith(".webm")) return "video/webm";
+    if (pathname.endsWith(".mov")) return "video/quicktime";
+  } catch {
+    return fallback;
+  }
+  return fallback;
+}
+
 function parseImageResult(image: FalImageFile): FalImageResult {
   if (typeof image.url !== "string" || image.url.length === 0) {
     throw new IntegrationError("FAL image payload missing url", "fal");
   }
 
   const contentType = image.contentType ?? image.content_type;
-  if (typeof contentType !== "string" || contentType.length === 0) {
-    throw new IntegrationError("FAL image payload missing content type", "fal");
-  }
 
   return {
     url: image.url,
-    contentType,
+    contentType: typeof contentType === "string" && contentType.length > 0
+      ? contentType
+      : contentTypeFromUrl(image.url, "application/octet-stream"),
     ...(typeof image.width === "number" ? { width: image.width } : {}),
     ...(typeof image.height === "number" ? { height: image.height } : {}),
   };
@@ -158,17 +191,26 @@ function parseVideoResult(response: FalVideoResponse): FalVideoResult {
   }
 
   const contentType = response.video.contentType ?? response.video.content_type;
-  if (typeof contentType !== "string" || contentType.length === 0) {
-    throw new IntegrationError("FAL video payload missing content type", "fal");
-  }
 
   return {
     url: response.video.url,
-    contentType,
+    contentType: typeof contentType === "string" && contentType.length > 0
+      ? contentType
+      : contentTypeFromUrl(response.video.url, "video/mp4"),
   };
 }
 
 export class FalClient {
+  readonly capabilities = {
+    image: {
+      outputFormats: ["jpeg", "png", "webp"] as const,
+      maxReferenceImages: MAX_IMAGE_REFERENCES,
+    },
+    video: {
+      maxReferenceImages: MAX_VIDEO_REFERENCE_IMAGES,
+    },
+  };
+
   private readonly client;
   private readonly imageGenModel: string;
   private readonly imageEditModel: string;
@@ -225,7 +267,7 @@ export class FalClient {
         this.imageGenModel,
         compactInput({
           prompt: opts.prompt,
-          image_size: opts.imageSize,
+          image_size: mapImageSize(opts.imageSize),
           num_images: opts.numImages,
           quality: opts.quality,
           output_format: opts.outputFormat,
@@ -243,7 +285,7 @@ export class FalClient {
         compactInput({
           prompt: opts.prompt,
           image_urls: opts.imageUrls,
-          image_size: opts.imageSize,
+          image_size: mapImageSize(opts.imageSize),
           num_images: opts.numImages,
           quality: opts.quality,
           output_format: opts.outputFormat,
@@ -255,11 +297,13 @@ export class FalClient {
   }
 
   async generateVideo(opts: FalGenerateVideoOptions): Promise<FalVideoResult> {
-    return withSpan(tracer, "fal.generateVideo", { "fal.model": this.videoGenModel }, async () => {
+    const model = opts.imageUrls?.length ? this.videoEditModel : this.videoGenModel;
+    return withSpan(tracer, "fal.generateVideo", { "fal.model": model }, async () => {
       const response = await this.subscribe<Record<string, unknown>, FalVideoResponse>(
-        this.videoGenModel,
+        model,
         compactInput({
           prompt: opts.prompt,
+          image_urls: opts.imageUrls,
           duration: opts.duration,
           resolution: opts.resolution,
           aspect_ratio: opts.aspectRatio,

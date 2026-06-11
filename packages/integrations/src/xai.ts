@@ -9,6 +9,7 @@ const DEFAULT_VIDEO_MODEL = "grok-imagine-video";
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_POLL_TIMEOUT_MS = 10 * 60_000;
 const MAX_IMAGE_EDIT_REFERENCES = 3;
+const MAX_VIDEO_REFERENCE_IMAGES = 7;
 
 type XaiImageSize =
   | "square_hd"
@@ -91,20 +92,42 @@ function mapImageSizeToAspectRatio(imageSize: XaiImageSize | undefined): string 
     case undefined:
       return imageSize;
     default:
-      return undefined;
+      return mapCustomImageSizeToAspectRatio(imageSize);
   }
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+  while (b !== 0) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+  return a || 1;
+}
+
+function mapCustomImageSizeToAspectRatio(imageSize: `${number}x${number}`): string | undefined {
+  const match = /^(\d+)x(\d+)$/.exec(imageSize);
+  if (!match) {
+    return undefined;
+  }
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0) {
+    return undefined;
+  }
+  const divisor = greatestCommonDivisor(width, height);
+  return `${width / divisor}:${height / divisor}`;
 }
 
 function mapImageQualityToResolution(quality: XaiImageQuality | undefined): "1k" | "2k" | undefined {
   return quality === "high" ? "2k" : quality ? "1k" : undefined;
 }
 
-function mapImageFormat(format: XaiImageFormat | undefined): "b64_json" | undefined {
-  if (!format) {
-    return undefined;
-  }
-  if (format === "jpeg") {
-    return "b64_json";
+function assertSupportedImageFormat(format: XaiImageFormat | undefined): void {
+  if (!format || format === "jpeg") {
+    return;
   }
   throw new IntegrationError("xAI image generation only supports JPEG output; use the FAL provider for PNG or WebP output.", "xai");
 }
@@ -157,6 +180,16 @@ function delay(ms: number): Promise<void> {
 }
 
 export class XaiImagineClient {
+  readonly capabilities = {
+    image: {
+      outputFormats: ["jpeg"] as const,
+      maxReferenceImages: MAX_IMAGE_EDIT_REFERENCES,
+    },
+    video: {
+      maxReferenceImages: MAX_VIDEO_REFERENCE_IMAGES,
+    },
+  };
+
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly imageModel: string;
@@ -182,13 +215,13 @@ export class XaiImagineClient {
     outputFormat?: XaiImageFormat;
   }): Promise<XaiImageResult[]> {
     return withSpan(tracer, "xai.generateImage", { "xai.model": this.imageModel }, async () => {
+      assertSupportedImageFormat(options.outputFormat);
       const response = await this.postJson<XaiImageResponse>("/images/generations", compactInput({
         model: this.imageModel,
         prompt: options.prompt,
         n: options.numImages,
         aspect_ratio: mapImageSizeToAspectRatio(options.imageSize),
         resolution: mapImageQualityToResolution(options.quality),
-        response_format: mapImageFormat(options.outputFormat),
       }));
       return parseImageResponse(response);
     });
@@ -207,6 +240,7 @@ export class XaiImagineClient {
     }
 
     return withSpan(tracer, "xai.editImage", { "xai.model": this.imageModel }, async () => {
+      assertSupportedImageFormat(options.outputFormat);
       const imageRefs = options.imageUrls.map((url) => ({ url, type: "image_url" }));
       const response = await this.postJson<XaiImageResponse>("/images/edits", compactInput({
         model: this.imageModel,
@@ -215,7 +249,6 @@ export class XaiImagineClient {
         n: options.numImages,
         aspect_ratio: mapImageSizeToAspectRatio(options.imageSize),
         resolution: mapImageQualityToResolution(options.quality),
-        response_format: mapImageFormat(options.outputFormat),
       }));
       return parseImageResponse(response);
     });
@@ -223,14 +256,20 @@ export class XaiImagineClient {
 
   async generateVideo(options: {
     prompt: string;
+    imageUrls?: string[];
     duration?: XaiVideoDuration;
     resolution?: XaiVideoResolution;
     aspectRatio?: XaiVideoAspectRatio;
     generateAudio?: boolean;
   }): Promise<XaiVideoResult> {
+    if (options.imageUrls && options.imageUrls.length > MAX_VIDEO_REFERENCE_IMAGES) {
+      throw new IntegrationError(`xAI reference-to-video supports up to ${MAX_VIDEO_REFERENCE_IMAGES} reference images.`, "xai");
+    }
+
     return this.startAndPollVideo("/videos/generations", compactInput({
       model: this.videoModel,
       prompt: options.prompt,
+      reference_images: options.imageUrls?.map((url) => ({ url })),
       duration: mapDuration(options.duration),
       resolution: options.resolution,
       aspect_ratio: mapAspectRatio(options.aspectRatio),

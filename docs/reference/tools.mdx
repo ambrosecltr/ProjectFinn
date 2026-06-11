@@ -178,6 +178,7 @@ That is why the most precise availability map lives in [LLM Runtime Map](/refere
 - workers must not send messages directly
 - `cancel_worker` is hot-path-only and may stop only active general workers that the user cancelled, corrected, or superseded
 - hot path must confirm irreversible actions
+- creative schemas and examples must match the selected provider capabilities; xAI image output is JPEG-only, while Fal image output supports JPEG, PNG, and WebP
 - creative results should return file ids when possible
 - user-facing files should be visible in Library; disposable Secure Exec scratch stays isolated from durable user files, and returned tool-output artifacts are `/artifacts/...`
 - workers should use `workspace_search` before using unfamiliar `finn.*` APIs

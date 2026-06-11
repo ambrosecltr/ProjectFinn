@@ -432,6 +432,11 @@ describe("createAllWorkerTools", () => {
 
     expect(runtime.promptAppendix).toContain("creative (write)");
 
+    const imageDocs = await searchCodeMode(runtime, "finn.creative.image outputFormat", 10);
+    expect(imageDocs).toContain("outputFormat accepts: jpeg.");
+    expect(imageDocs).toContain('outputFormat: "jpeg"');
+    expect(imageDocs).not.toContain('outputFormat: "png"');
+
     const docs = await searchCodeMode(runtime, "finn.creative.video", 10);
     expect(docs).toContain("finn.creative.video");
 

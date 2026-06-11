@@ -411,6 +411,34 @@ describe("createIntegrationClients", () => {
     expect(parallelClients.exa).toBeUndefined();
   });
 
+  it("preserves selected creative provider capabilities through the creative router", () => {
+    const xaiOnlyClients = createIntegrationClients({
+      mediaGeneration: { imageProvider: "xai", videoProvider: "xai" },
+      models: { worker: { model: "openai:gpt-4o-mini" } },
+      memory: { provider: "none" },
+      integrations: {
+        xai: { apiKey: "xai-key" },
+      },
+    } as never);
+    const mixedClients = createIntegrationClients({
+      mediaGeneration: { imageProvider: "xai", videoProvider: "fal" },
+      models: { worker: { model: "openai:gpt-4o-mini" } },
+      memory: { provider: "none" },
+      integrations: {
+        fal: { apiKey: "fal-key" },
+        xai: { apiKey: "xai-key" },
+      },
+    } as never);
+
+    const xaiCapabilities = xaiOnlyClients.creative!.capabilities;
+    const mixedCapabilities = mixedClients.creative!.capabilities;
+
+    expect(xaiCapabilities.image.outputFormats).toEqual(["jpeg"]);
+    expect(xaiCapabilities.video.maxReferenceImages).toBe(7);
+    expect(mixedCapabilities.image.outputFormats).toEqual(["jpeg"]);
+    expect(mixedCapabilities.video.maxReferenceImages).toBe(9);
+  });
+
   it("creates memory client only when a provider is selected and configured", () => {
     expect(createIntegrationClients({ memory: { provider: "none" }, integrations: {} } as never).memory).toBeUndefined();
     expect(createIntegrationClients({

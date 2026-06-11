@@ -1,9 +1,12 @@
 import type { CreativeRuntimeService } from "@finn/runtime";
 import { formatToolsetError } from "../../utils.js";
-import { creativeImageInputSchema, creativeVideoInputSchema } from "./schemas.js";
+import { createCreativeImageInputSchema, createCreativeVideoInputSchema } from "./schemas.js";
 
 export async function creativeImageCommand(runtime: CreativeRuntimeService, input: unknown) {
-  const parsed = creativeImageInputSchema.parse(input);
+  const parsed = createCreativeImageInputSchema({
+    outputFormats: runtime.capabilities.image.outputFormats,
+    maxReferenceImages: runtime.capabilities.image.maxReferenceImages,
+  }).parse(input);
   try {
     return await runtime.createOrEditImage(parsed);
   } catch (error) {
@@ -12,7 +15,9 @@ export async function creativeImageCommand(runtime: CreativeRuntimeService, inpu
 }
 
 export async function creativeVideoCommand(runtime: CreativeRuntimeService, input: unknown) {
-  const parsed = creativeVideoInputSchema.parse(input);
+  const parsed = createCreativeVideoInputSchema({
+    maxReferenceImages: runtime.capabilities.video.maxReferenceImages,
+  }).parse(input);
   try {
     return await runtime.createOrEditVideo(parsed);
   } catch (error) {

@@ -58,6 +58,31 @@ describe("FalClient", () => {
     });
   });
 
+  it("maps custom image sizes to Fal width and height objects", async () => {
+    subscribeMock.mockResolvedValue({
+      requestId: "req_size",
+      data: {
+        images: [{ url: "https://example.com/out.png", content_type: "image/png" }],
+      },
+    });
+
+    const client = new FalClient({ apiKey: "test-key" });
+    await client.generateImage({
+      prompt: "wide banner",
+      imageSize: "1280x720",
+      outputFormat: "webp",
+    });
+
+    expect(subscribeMock).toHaveBeenCalledWith("openai/gpt-image-2", {
+      input: {
+        prompt: "wide banner",
+        image_size: { width: 1280, height: 720 },
+        output_format: "webp",
+      },
+      logs: true,
+    });
+  });
+
   it("uses Seedance 2 text-to-video parameters", async () => {
     subscribeMock.mockResolvedValue({
       requestId: "req_234",
@@ -85,6 +110,52 @@ describe("FalClient", () => {
       },
       logs: true,
     });
+  });
+
+  it("uses Seedance 2 reference-to-video for text-to-video reference images", async () => {
+    subscribeMock.mockResolvedValue({
+      requestId: "req_ref",
+      data: {
+        video: { url: "https://example.com/out.mp4", content_type: "video/mp4" },
+      },
+    });
+
+    const client = new FalClient({ apiKey: "test-key" });
+    await client.generateVideo({
+      prompt: "show the product on a table",
+      imageUrls: ["https://example.com/product.png"],
+      duration: "5",
+      resolution: "720p",
+      aspectRatio: "16:9",
+    });
+
+    expect(subscribeMock).toHaveBeenCalledWith("bytedance/seedance-2.0/reference-to-video", {
+      input: {
+        prompt: "show the product on a table",
+        image_urls: ["https://example.com/product.png"],
+        duration: "5",
+        resolution: "720p",
+        aspect_ratio: "16:9",
+      },
+      logs: true,
+    });
+  });
+
+  it("infers missing content type from generated media URLs", async () => {
+    subscribeMock.mockResolvedValue({
+      requestId: "req_missing_content_type",
+      data: {
+        images: [{ url: "https://example.com/out.webp" }],
+      },
+    });
+
+    const client = new FalClient({ apiKey: "test-key" });
+    await expect(client.generateImage({ prompt: "test" })).resolves.toEqual([
+      {
+        url: "https://example.com/out.webp",
+        contentType: "image/webp",
+      },
+    ]);
   });
 
   it("uses Seedance 2 reference-to-video for video edits", async () => {

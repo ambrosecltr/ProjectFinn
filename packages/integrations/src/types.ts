@@ -7,6 +7,15 @@ import type { McpBroker } from "./mcp-service.js";
 import type { MemoryClient } from "./memory.js";
 
 export interface CreativeIntegrationClient {
+  capabilities: {
+    image: {
+      outputFormats: readonly ("jpeg" | "png" | "webp")[];
+      maxReferenceImages: number;
+    };
+    video: {
+      maxReferenceImages: number;
+    };
+  };
   generateImage(options: Parameters<FalClient["generateImage"]>[0]): ReturnType<FalClient["generateImage"]>;
   editImage(options: Parameters<FalClient["editImage"]>[0]): ReturnType<FalClient["editImage"]>;
   generateVideo(options: Parameters<FalClient["generateVideo"]>[0]): ReturnType<FalClient["generateVideo"]>;
