@@ -18,8 +18,8 @@ Optional but useful:
 
 - Cloudflare Tunnel for public local web/API callbacks
 - Composio for connectors and patterns
-- Deepgram and ElevenLabs for voice
-- Exa or Parallel for research, and Fal for creative tasks
+- Deepgram/xAI and ElevenLabs/xAI for voice
+- Exa or Parallel for research, and Fal or xAI for creative tasks
 
 Runtime note:
 
@@ -51,9 +51,9 @@ At minimum, fill in these values:
 | `DEFAULT_PROVIDER` | Default LLM provider: `anthropic`, `openai`, `fireworks`, `deepseek`, or `openai-compatible` |
 | `DEFAULT_MODEL` | Default provider-prefixed model string |
 | `DEFAULT_API_KEY` | API key for the default provider; optional only for unauthenticated OpenAI-compatible endpoints |
-| `DEFAULT_BASE_URL` | Required for OpenAI-compatible endpoints; include the `/v1` prefix |
+| `DEFAULT_BASE_URL` | Required for OpenAI-compatible endpoints; include the `/v1` prefix. Optional for Anthropic-compatible custom endpoints |
 
-If you only want one provider/model across Finn, leave the `HOT_PATH_*`, `WORKER_*`, and `COMPACTOR_*` LLM overrides empty. Use those process-specific overrides only when a process needs a different provider, model, API key, or OpenAI-compatible base URL.
+If you only want one provider/model across Finn, leave the `HOT_PATH_*`, `WORKER_*`, and `COMPACTOR_*` LLM overrides empty. Use those process-specific overrides only when a process needs a different provider, model, API key, or custom base URL.
 
 Set `SPECTRUM_ALLOWED_NUMBERS` when you want a self-hosted allowlist and boot-time user provisioning. It is optional for runtime config, but most local demos set it to the phone numbers that should be allowed to text Finn.
 

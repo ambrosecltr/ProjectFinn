@@ -310,7 +310,7 @@ export async function createWorkerRuntimeConfig(deps: WorkerToolsDeps, options: 
     && (webSearchEnabled || webFetchEnabled);
   const creativeImageEnabled = deps.capabilities?.create_or_edit_image ?? true;
   const creativeVideoEnabled = deps.capabilities?.create_or_edit_video ?? true;
-  const shouldExposeCreativeToolset = Boolean(deps.integrations.fal)
+  const shouldExposeCreativeToolset = Boolean(deps.integrations.creative)
     && (processType === "worker" || processType === "pattern_worker")
     && (creativeImageEnabled || creativeVideoEnabled);
   const scopedMcp = options.source === "pattern" && deps.mcp

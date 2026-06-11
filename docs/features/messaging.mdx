@@ -29,11 +29,11 @@ There are four main messaging components:
 
 ## Spectrum SDK Patch
 
-Finn carries a Bun patch for `spectrum-ts@1.13.1` at `patches/spectrum-ts@1.13.1.patch`.
+Finn carries a Bun patch for `spectrum-ts@2.0.0` at `patches/spectrum-ts@2.0.0.patch`.
 
-The patch exists because Spectrum's iMessage provider drops `message.text` when an inbound iMessage contains attachments. Without it, text+photo sends can arrive in Finn as an image-only turn, losing the user's caption. The patch keeps that text as provider metadata, and `MessageRouter` also has a fallback that recovers text/caption fields from raw/custom/group-shaped Spectrum payloads.
+The patch exists because Spectrum's iMessage provider can drop or reshape metadata when inbound iMessages contain attachments. Without it, text+photo sends can arrive in Finn as an image-only turn, losing the user's caption, and voice attachments may not carry the content shape Finn's attachment processor expects. The patch keeps text/caption metadata available and preserves voice attachment handling, while `MessageRouter` also has a fallback that recovers text/caption fields from raw/custom/group-shaped Spectrum payloads.
 
-Remove the patch only after Spectrum upstream preserves text on iMessage attachment and grouped attachment messages. Before removing it, run the `MessageRouter` caption regression tests without the patch and confirm they still pass.
+Remove the patch only after Spectrum upstream preserves text on iMessage attachment/grouped attachment messages and voice attachment handling. Before removing it, run the `MessageRouter` caption and attachment processor voice regression tests without the patch and confirm they still pass.
 
 ## Why Ingress Coalescing Exists
 
@@ -78,13 +78,13 @@ When the right integrations are configured, Finn supports voice-heavy interactio
 
 - audio arrives through Spectrum as `voice` or `attachment` content
 - the attachment processor normalizes the bytes
-- Deepgram transcribes it if configured; Finn can still receive the audio when Deepgram is absent
+- the selected STT provider transcribes it if configured; Finn can still receive the audio when STT is absent
 - the turn context distinguishes iMessage voice notes from ordinary audio files
 - when STT is absent, Finn sees that it cannot hear the voice/audio content and should tell the user naturally
 
 ### Outbound
 
-- if ElevenLabs is configured, the hot path can explicitly set `voice_message: true` on `send_message`
+- if a TTS provider is configured, the hot path can explicitly set `voice_message: true` on `send_message`
 - Finn synthesizes that text, converts it to `.caf`, stores it locally, and sends it as Spectrum voice content
 - normal text is still the default, even after inbound voice; voice replies are for explicit user requests or when audio is clearly the better fit
 
@@ -95,7 +95,7 @@ Inbound attachments are normalized into Finn's file store before workers use the
 Important examples:
 
 - HEIC and HEIF images are converted to JPEG
-- audio and video can be transcribed when Deepgram is available
+- audio and video can be transcribed when an STT provider is available
 - images can be described for context
 
 This keeps downstream worker behavior stable, especially for creative tasks.

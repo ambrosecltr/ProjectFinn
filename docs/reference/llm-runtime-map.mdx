@@ -105,7 +105,7 @@ The hot path does not expose the same active tool list on every turn. `prepareSt
 
 - `send_message` exists on every hot-path turn.
 - `send_message.voice_message` exists only when `createHotPathTools()` receives `voice` deps.
-- `voice` deps are only passed from `packages/server/src/user-runtime.ts` when text-to-speech is configured and an ElevenLabs client exists.
+- `voice` deps are only passed from `packages/server/src/user-runtime.ts` when text-to-speech is configured and a selected TTS client exists.
 - `delegate` exists for every inbound hot-path source when a `WorkerManager` is configured.
 - `search_memory` exists only when an external memory provider is active and the user runtime passes the provider dependency.
 - File, reminder, My Day, and Pattern context tools are active across hot-path sources when wired; file context uses Finn JS workspace with the `finn.files.*` API.
@@ -132,7 +132,7 @@ All other worker tools come from `createWorkerRuntimeConfig()` in `packages/tool
 | Tool family | Finn JS workspace API | Main gate |
 |---|---|---|
 | Research | `finn.web.search`, `finn.web.fetch` | selected web provider integration exists and worker capability flag is enabled |
-| Creative | `finn.creative.image`, `finn.creative.video` | Fal integration exists and worker capability flag is enabled |
+| Creative | `finn.creative.image`, `finn.creative.video` | selected creative integration exists and worker capability flag is enabled |
 | Files | `finn.files.*` plus native `view_image` for image pixels | `workspace_files` capability is enabled and the process runtime grants file access |
 | MCP | `finn.mcp.servers`, `finn.mcp.search`, `finn.mcp.resources`, `finn.mcp.readResource`, optional `finn.mcp.call` | MCP service exists and `mcp` capability is enabled |
 | Pattern management | `finn.patterns.*` | `patterns` capability is enabled, Pattern runtime exists, and the worker type is explicitly `pattern_management` |
@@ -294,11 +294,11 @@ Finn does not expose optional tools based on prompt text alone. Tool exposure is
 Important derived booleans are:
 
 - The selected web provider (`WEB_SEARCH_PROVIDER=auto|exa|parallel|none`) plus its API key enables the worker Finn JS workspace `web` API.
-- Fal API key enables the worker Finn JS workspace `creative` API.
+- A selected Fal or xAI creative provider enables the worker Finn JS workspace `creative` API.
 - Composio API key enables worker Composio runtime tools.
 - selected memory provider configuration enables worker user/Pattern memory search and asynchronous handled-turn/Pattern outcome storage. `MEMORY_MODE=hybrid|tools` may also expose hot-path `search_memory`, and providers that implement memory reflection, currently Hindsight and Honcho, may expose `reflect_memory` in those modes. Mem0 is search/context only. `MEMORY_MODE=context` hides hot-path memory tools and relies on compact auto-recall injection instead.
-- ElevenLabs API key enables text-to-speech capability.
-- Deepgram plus ElevenLabs together enable full voice round-trip capability.
+- A selected TTS provider, currently ElevenLabs or xAI, enables text-to-speech capability.
+- Full voice round-trip capability requires both selected STT and selected TTS providers, currently Deepgram/xAI for STT and ElevenLabs/xAI for TTS.
 
 ### Runtime Dependency Source
 

@@ -22,7 +22,7 @@ These settings are the minimum viable configuration. Finn fails startup if any a
 | `DEFAULT_PROVIDER` | required; `anthropic`, `openai`, `fireworks`, `deepseek`, or `openai-compatible` |
 | `DEFAULT_MODEL` | required; provider-prefixed model string |
 | `DEFAULT_API_KEY` | required for hosted providers; optional only for unauthenticated OpenAI-compatible endpoints |
-| `DEFAULT_BASE_URL` | required when `DEFAULT_PROVIDER=openai-compatible`; include the OpenAI-compatible API base URL, usually ending in `/v1` |
+| `DEFAULT_BASE_URL` | required when `DEFAULT_PROVIDER=openai-compatible`; optional for Anthropic-compatible custom endpoints. OpenAI-compatible URLs usually end in `/v1` |
 
 With only these values, Finn can receive and send iMessages, store files, use profile/conversation context, and run all LLM processes on the same model/provider. Optional integrations only become available when their own config is present.
 
@@ -70,7 +70,7 @@ Every runtime process resolves from the default model/provider/key unless a proc
 | `DEFAULT_PROVIDER` | none; required |
 | `DEFAULT_MODEL` | none; required |
 | `DEFAULT_API_KEY` | none; required for hosted providers |
-| `DEFAULT_BASE_URL` | unset; required when `DEFAULT_PROVIDER=openai-compatible` |
+| `DEFAULT_BASE_URL` | unset; required when `DEFAULT_PROVIDER=openai-compatible`, optional for Anthropic custom endpoints |
 | `DEFAULT_MAX_CONTEXT_TOKENS` | `128000` |
 | `DEFAULT_MAX_OUTPUT_TOKENS` | unset |
 | `DEFAULT_REASONING_EFFORT` | unset; Anthropic or DeepSeek only |
@@ -78,21 +78,21 @@ Every runtime process resolves from the default model/provider/key unless a proc
 | `HOT_PATH_MODEL` | `DEFAULT_MODEL` |
 | `HOT_PATH_PROVIDER` | `DEFAULT_PROVIDER` |
 | `HOT_PATH_API_KEY` | `DEFAULT_API_KEY` |
-| `HOT_PATH_BASE_URL` | `DEFAULT_BASE_URL`; OpenAI-compatible only |
+| `HOT_PATH_BASE_URL` | `DEFAULT_BASE_URL`; Anthropic or OpenAI-compatible only |
 | `HOT_PATH_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
 | `HOT_PATH_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
 | `HOT_PATH_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; Anthropic or DeepSeek only |
 | `WORKER_MODEL` | `DEFAULT_MODEL` |
 | `WORKER_PROVIDER` | `DEFAULT_PROVIDER` |
 | `WORKER_API_KEY` | `DEFAULT_API_KEY` |
-| `WORKER_BASE_URL` | `DEFAULT_BASE_URL`; OpenAI-compatible only |
+| `WORKER_BASE_URL` | `DEFAULT_BASE_URL`; Anthropic or OpenAI-compatible only |
 | `WORKER_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
 | `WORKER_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
 | `WORKER_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; Anthropic or DeepSeek only |
 | `COMPACTOR_MODEL` | `DEFAULT_MODEL` |
 | `COMPACTOR_PROVIDER` | `DEFAULT_PROVIDER` |
 | `COMPACTOR_API_KEY` | `DEFAULT_API_KEY` |
-| `COMPACTOR_BASE_URL` | `DEFAULT_BASE_URL`; OpenAI-compatible only |
+| `COMPACTOR_BASE_URL` | `DEFAULT_BASE_URL`; Anthropic or OpenAI-compatible only |
 | `COMPACTOR_MAX_CONTEXT_TOKENS` | `DEFAULT_MAX_CONTEXT_TOKENS` |
 | `COMPACTOR_MAX_OUTPUT_TOKENS` | `DEFAULT_MAX_OUTPUT_TOKENS` |
 | `COMPACTOR_REASONING_EFFORT` | `DEFAULT_REASONING_EFFORT`; Anthropic or DeepSeek only |
@@ -108,6 +108,8 @@ Supported providers:
 The provider and model string need to agree. If they do not, startup validation should fail.
 
 OpenAI-compatible model strings use the `openai-compatible:` prefix, for example `openai-compatible:local-chat-model`. Base URLs must include the provider's OpenAI-compatible API prefix, commonly `/v1`. API keys are optional only when the endpoint accepts unauthenticated requests. Finn disables forced tool choice by default for OpenAI-compatible endpoints because many gateways accept optional tool calls but reject `tool_choice: "required"` routing.
+
+Anthropic can also use `DEFAULT_BASE_URL` or a process-specific `*_BASE_URL` for custom Anthropic-compatible endpoints. Unlike OpenAI-compatible providers, Anthropic model strings still use the `anthropic:` prefix.
 
 Legacy provider-key envs such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `FIREWORKS_API_KEY` are no longer read by the runtime. Put the active key in `DEFAULT_API_KEY`, or use the process-specific `*_API_KEY` override when a process uses a different provider/account.
 
@@ -296,18 +298,20 @@ Stored files live inside each user's worker workspace under `files/`.
 | `PARALLEL_TIMEOUT_MS` | optional Parallel SDK request timeout override |
 | `PARALLEL_MAX_RETRIES` | optional Parallel SDK retry count override |
 
-### Fal
+### Creative Media
 
 | Variable | Default |
 |---|---|
-| `IMAGE_PROVIDER` | `auto`; use `fal` to force Fal image generation/editing, or `none` to disable image tools |
-| `VIDEO_PROVIDER` | `auto`; use `fal` to force Fal video generation/editing, or `none` to disable video tools |
+| `IMAGE_PROVIDER` | `auto`; use `fal` or `xai` to force image generation/editing, or `none` to disable image tools |
+| `VIDEO_PROVIDER` | `auto`; use `fal` or `xai` to force video generation/editing, or `none` to disable video tools |
 | `FAL_API_KEY` | none |
 | `FAL_IMAGE_GEN_MODEL` | `openai/gpt-image-2` |
 | `FAL_IMAGE_EDIT_MODEL` | `openai/gpt-image-2/edit` |
 | `FAL_VIDEO_GEN_MODEL` | `bytedance/seedance-2.0/text-to-video` |
 | `FAL_IMAGE_TO_VIDEO_MODEL` | `bytedance/seedance-2.0/image-to-video` |
 | `FAL_VIDEO_EDIT_MODEL` | `bytedance/seedance-2.0/reference-to-video` |
+
+`auto` preserves existing behavior by preferring Fal when `FAL_API_KEY` is set and falling back to xAI when only `XAI_API_KEY` is available. Image and video providers resolve independently, so mixed Fal/xAI configurations are allowed.
 
 ### xAI
 

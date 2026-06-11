@@ -55,13 +55,15 @@ The hot path does not get a general document-reading tool. It only receives boun
 
 ## Creative Generation
 
-When Fal is configured, workers can:
+When a creative provider is configured, workers can:
 
 - generate images
 - edit images
 - generate videos
 - animate images into video
 - edit videos
+
+Finn currently supports Fal and xAI as creative backends. `IMAGE_PROVIDER` and `VIDEO_PROVIDER` can select different providers, and the worker runtime exposes them through the same provider-neutral `finn.creative.*` workspace APIs. In `auto` mode, Finn prefers Fal when configured and falls back to xAI.
 
 Generated outputs are downloaded, stored locally, and returned with file ids so the hot path can deliver the actual asset back to the user.
 
@@ -71,10 +73,10 @@ When a generated or edited asset is meant for the user, workers should keep it v
 
 Voice support is conditional:
 
-- Deepgram enables speech-to-text
-- ElevenLabs enables text-to-speech
+- Deepgram or xAI enables speech-to-text
+- ElevenLabs or xAI enables text-to-speech
 
-The two capabilities are independent. With only Deepgram, Finn can transcribe inbound voice/audio and reply in text. With only ElevenLabs, Finn can expose explicit voice replies in the hot-path `send_message` tool. Outbound voice replies are synthesized, converted to `.caf`, stored locally, and sent through Spectrum voice content so iMessage can render them as voice messages.
+The two capabilities are independent. With only speech-to-text, Finn can transcribe inbound voice/audio and reply in text. With only text-to-speech, Finn can expose explicit voice replies in the hot-path `send_message` tool. Outbound voice replies are synthesized, converted to `.caf`, stored locally, and sent through Spectrum voice content so iMessage can render them as voice messages.
 
 ## Practical Constraint
 

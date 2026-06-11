@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
 import type { PatternRunRecord } from "@finn/core";
-import { ComposioClient, ExaClient, FalClient, type McpBroker, type MemoryClient } from "@finn/integrations";
-import { createCreativeRuntimeService, createFilesRuntime, createMemoryRuntimeService, createPatternsRuntimeService, createUserRuntimeServices, createWebRuntimeService, type UserRuntimeServices } from "@finn/runtime";
+import { ComposioClient, ExaClient, FalClient, XaiImagineClient, type McpBroker, type MemoryClient } from "@finn/integrations";
+import { createCreativeRuntimeService, createFilesRuntime, createMemoryRuntimeService, createPatternsRuntimeService, createUserRuntimeServices, createWebRuntimeService, type CreativeRuntimeClient, type UserRuntimeServices } from "@finn/runtime";
 import type { ToolsetExecuteInput } from "@finn/toolsets";
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
@@ -85,7 +85,7 @@ async function createWorkerRuntimeConfig(
   return runtime;
 }
 
-function createTestRuntime(exa?: ExaClient, fal?: FalClient) {
+function createTestRuntime(exa?: ExaClient, creative?: CreativeRuntimeClient) {
   const files = createFilesRuntime({
     workspaceRoot: testWorkspaceRoot,
     documentExtraction: true,
@@ -94,7 +94,7 @@ function createTestRuntime(exa?: ExaClient, fal?: FalClient) {
     workspace: testWorkspaceRoot,
     files,
     ...(exa ? { web: createWebRuntimeService(exa) } : {}),
-    ...(fal ? { creative: createCreativeRuntimeService({ client: fal, files }) } : {}),
+    ...(creative ? { creative: createCreativeRuntimeService({ client: creative, files }) } : {}),
   });
 }
 
@@ -141,6 +141,16 @@ function createReflectMemoryClient(): MemoryClient {
 
 function createFalClient(): FalClient {
   const client = new FalClient({ apiKey: "test" });
+  client.generateImage = mock(async () => []);
+  client.editImage = mock(async () => []);
+  client.generateVideo = mock(async () => ({ url: "https://example.com/video.mp4", contentType: "video/mp4" }));
+  client.imageToVideo = mock(async () => ({ url: "https://example.com/video.mp4", contentType: "video/mp4" }));
+  client.editVideo = mock(async () => ({ url: "https://example.com/video.mp4", contentType: "video/mp4" }));
+  return client;
+}
+
+function createXaiImagineClient(): XaiImagineClient {
+  const client = new XaiImagineClient({ apiKey: "test" });
   client.generateImage = mock(async () => []);
   client.editImage = mock(async () => []);
   client.generateVideo = mock(async () => ({ url: "https://example.com/video.mp4", contentType: "video/mp4" }));
@@ -379,7 +389,7 @@ describe("createAllWorkerTools", () => {
     const fal = createFalClient();
     const deps = {
       ...baseDeps,
-      integrations: { fal },
+      integrations: { fal, creative: fal },
       runtime: createTestRuntime(undefined, fal),
     };
     const generalRuntime = await createWorkerRuntimeConfig(deps, { source: "user", workerType: "general" });
@@ -412,11 +422,35 @@ describe("createAllWorkerTools", () => {
     });
   });
 
+  it("exposes Creative Finn JS workspace APIs when xAI is the configured creative provider", async () => {
+    const xaiImagine = createXaiImagineClient();
+    const runtime = await createWorkerRuntimeConfig({
+      ...baseDeps,
+      integrations: { xaiImagine, creative: xaiImagine },
+      runtime: createTestRuntime(undefined, xaiImagine),
+    }, { source: "user", workerType: "general" });
+
+    expect(runtime.promptAppendix).toContain("creative (write)");
+
+    const docs = await searchCodeMode(runtime, "finn.creative.video", 10);
+    expect(docs).toContain("finn.creative.video");
+
+    await runCodeModeApi(runtime, "finn.creative.video", { prompt: "make a short clip" });
+
+    expect(xaiImagine.generateVideo).toHaveBeenCalledWith({
+      prompt: "make a short clip",
+      resolution: undefined,
+      duration: undefined,
+      aspectRatio: undefined,
+      generateAudio: undefined,
+    });
+  });
+
   it("gates individual Creative Finn JS workspace APIs with worker capability flags", async () => {
     const fal = createFalClient();
     const runtime = await createWorkerRuntimeConfig({
       ...baseDeps,
-      integrations: { fal },
+      integrations: { fal, creative: fal },
       runtime: createTestRuntime(undefined, fal),
       capabilities: {
         web_search: false,
@@ -558,7 +592,7 @@ describe("createAllWorkerTools", () => {
     const fal = createFalClient();
     const runtime = await createWorkerRuntimeConfig({
       ...baseDeps,
-      integrations: { fal },
+      integrations: { fal, creative: fal },
       runtime: createTestRuntime(undefined, fal),
     }, {
       source: "pattern",
@@ -1336,6 +1370,7 @@ describe("createWorkerRuntimeConfig", () => {
         web: exa,
         exa,
         fal,
+        creative: fal,
       },
       runtime: createTestRuntime(exa, fal),
       mcp: createMcpBroker(),
