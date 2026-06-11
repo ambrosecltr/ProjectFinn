@@ -64,6 +64,7 @@ export class SpectrumClient {
   private readonly spacesByRecipient = new Map<string, Space>();
   private readonly linePhonesByRecipient = new Map<string, string>();
   private readonly messagesById = new Map<string, Message>();
+  private readonly sendQueuesByRecipient = new Map<string, Promise<void>>();
 
   constructor(private readonly config: SpectrumClientConfig) {
     this.rateLimiter = new RateLimiter({ maxRequests: 10, windowMs: 1000, name: "spectrum" });
@@ -167,7 +168,7 @@ export class SpectrumClient {
   }
 
   async sendText(to: string, text: string, options: SendMessageOptions = {}): Promise<SendMessageResult> {
-    return this.withSendSlot("sendText", {
+    return this.withSendSlot("sendText", to, {
       to,
       length: text.length,
       replyToMessageHandle: options.replyToMessageHandle,
@@ -216,7 +217,7 @@ export class SpectrumClient {
   }
 
   async sendAttachment(to: string, input: SendFileInput, caption?: string): Promise<void> {
-    await this.withSendSlot("sendAttachment", { to, filename: input.filename, mimeType: input.mimeType }, async () => {
+    await this.withSendSlot("sendAttachment", to, { to, filename: input.filename, mimeType: input.mimeType }, async () => {
       const space = await this.resolveDmSpace(to);
       if (caption?.trim()) {
         await space.send(caption.trim());
@@ -226,7 +227,7 @@ export class SpectrumClient {
   }
 
   async sendVoice(to: string, input: SendVoiceInput, options: SendMessageOptions = {}): Promise<SendMessageResult> {
-    return this.withSendSlot("sendVoice", {
+    return this.withSendSlot("sendVoice", to, {
       to,
       filename: input.filename,
       mimeType: input.mimeType,
@@ -281,7 +282,7 @@ export class SpectrumClient {
   }
 
   async sendContactCard(to: string, input: ContactCardInput): Promise<void> {
-    await this.withSendSlot("sendContactCard", { to, name: input.name }, async () => {
+    await this.withSendSlot("sendContactCard", to, { to, name: input.name }, async () => {
       const space = await this.resolveDmSpace(to);
       const photo = input.photo;
       await space.send(contact({
@@ -293,7 +294,7 @@ export class SpectrumClient {
   }
 
   async sendReaction(to: string, messageId: string, reaction: TapbackType): Promise<void> {
-    await this.withSendSlot("sendReaction", { to, messageId, reaction }, async () => {
+    await this.withSendSlot("sendReaction", to, { to, messageId, reaction }, async () => {
       const message = await this.resolveMessage(to, messageId);
       await message.react(toTapbackEmoji(reaction));
     });
@@ -354,23 +355,40 @@ export class SpectrumClient {
     return space;
   }
 
-  private async withSendSlot<T>(operation: string, meta: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
-    return withSpan(tracer, `spectrum.${operation}`, {}, async () => {
-      const waitedMs = await this.rateLimiter.waitForSlot();
-      if (waitedMs > 0) {
-        logger.debug({ operation, waitedMs, ...meta }, "Waited for Spectrum rate limiter slot");
-      }
-
-      try {
-        return await fn();
-      } catch (error) {
-        logger.error({ error, operation, ...meta }, "Spectrum messaging operation failed");
-        throw new MessagingError(
-          `Spectrum ${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
-          "spectrum",
-        );
-      }
+  private async withSendSlot<T>(operation: string, to: string, meta: Record<string, unknown>, fn: () => Promise<T>): Promise<T> {
+    const previous = this.sendQueuesByRecipient.get(to) ?? Promise.resolve();
+    let releaseCurrent = () => {};
+    const current = new Promise<void>((resolve) => {
+      releaseCurrent = resolve;
     });
+    const queued = previous.catch(() => undefined).then(() => current);
+    this.sendQueuesByRecipient.set(to, queued);
+
+    await previous.catch(() => undefined);
+
+    try {
+      return await withSpan(tracer, `spectrum.${operation}`, {}, async () => {
+        const waitedMs = await this.rateLimiter.waitForSlot();
+        if (waitedMs > 0) {
+          logger.debug({ operation, waitedMs, ...meta }, "Waited for Spectrum rate limiter slot");
+        }
+
+        try {
+          return await fn();
+        } catch (error) {
+          logger.error({ error, operation, ...meta }, "Spectrum messaging operation failed");
+          throw new MessagingError(
+            `Spectrum ${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
+            "spectrum",
+          );
+        }
+      });
+    } finally {
+      releaseCurrent();
+      if (this.sendQueuesByRecipient.get(to) === queued) {
+        this.sendQueuesByRecipient.delete(to);
+      }
+    }
   }
 }
 

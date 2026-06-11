@@ -3,6 +3,50 @@ import { describe, expect, it, mock } from "bun:test";
 import { SpectrumClient } from "./adapter.js";
 
 describe("SpectrumClient replies", () => {
+  it("serializes concurrent sends to the same recipient", async () => {
+    let releaseFirstSend = () => {};
+    let markFirstSendStarted = () => {};
+    const firstSendStarted = new Promise<void>((resolve) => {
+      markFirstSendStarted = resolve;
+    });
+    const sendStarts: string[] = [];
+    const space = {
+      __platform: "iMessage",
+      id: "space_123",
+      phone: "+15550000000",
+      getMessage: mock(async () => undefined),
+      send: mock(async (text: string) => {
+        sendStarts.push(text);
+        if (text === "first") {
+          markFirstSendStarted();
+          await new Promise<void>((resolve) => {
+            releaseFirstSend = resolve;
+          });
+        }
+        return { id: `out_${text}` };
+      }),
+    };
+    const client = new SpectrumClient({ projectId: "project", projectSecret: "secret", dedicatedLinePhone: undefined });
+    client.rememberInboundMessage("+15551234567", space as never, {
+      id: "msg_inbound",
+      content: { type: "text", text: "hello" },
+      timestamp: new Date("2026-05-09T00:00:00.000Z"),
+    } as never);
+
+    const first = client.sendText("+15551234567", "first");
+    await firstSendStarted;
+    const second = client.sendText("+15551234567", "second");
+
+    await Promise.resolve();
+    expect(sendStarts).toEqual(["first"]);
+
+    releaseFirstSend();
+    const results = await Promise.all([first, second]);
+
+    expect(sendStarts).toEqual(["first", "second"]);
+    expect(results.map((result) => result.messageIds[0])).toEqual(["out_first", "out_second"]);
+  });
+
   it("sends threaded text replies when the target can be resolved", async () => {
     const target = {
       id: "msg_target",
