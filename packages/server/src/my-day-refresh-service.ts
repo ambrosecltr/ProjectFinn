@@ -1,7 +1,7 @@
 import { wrapToolsWithOutputArtifacts } from "@finn/agents";
 import { createFinnTelemetry, createLogger, type AppConfig, type AutomationRunRecord, type MyDayTodoRecord, type MyDayTodoSource, type UserContext } from "@finn/core";
 import type { Database } from "@finn/db";
-import { getAbortErrorMessage, withAnthropicSystemCacheControl, withLLMTimeout, type LLMManager } from "@finn/llm";
+import { getAbortErrorMessage, withAnthropicSystemCacheControl, withAnthropicToolCacheControl, withLLMTimeout, type LLMManager } from "@finn/llm";
 import { generateText, stepCountIs, tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { createProcessRuntimeServices, type UserRuntimeServices } from "@finn/runtime";
@@ -326,14 +326,14 @@ export class MyDayRefreshService {
           "Use search_memory when user understanding would help decide whether something matters today. Connector inspection should stay focused on the current local day and primarily on records changed since the primary inspection window unless an older source is needed to clarify today's item.",
           "Update My Day by calling update_my_day_summary. Use create_my_day_todo, edit_my_day_todo, and archive_my_day_todo only when warranted. Do not return JSON.",
         ].filter((line): line is string => line !== null).join("\n\n"),
-        tools: {
+        tools: withAnthropicToolCacheControl({
           ...wrapToolsWithOutputArtifacts({
             ...fileCodeModeTools.tools,
             ...tools,
             search_memory: createSearchMemoryTool({ memory: processRuntime.memory, maxResults: 5 }),
             ...refreshTools.tools,
           }, toolOutputArtifacts),
-        },
+        }),
         ...this.deps.llmManager.getRequestOptions("worker", runId),
         stopWhen: stepCountIs(this.deps.llmManager.getMaxSteps("worker")),
         experimental_telemetry: createFinnTelemetry({

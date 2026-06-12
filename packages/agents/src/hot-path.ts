@@ -28,7 +28,7 @@ import {
 } from "@finn/core";
 import type { MemoryRuntimeService } from "@finn/runtime";
 import type { Database } from "@finn/db";
-import { withAnthropicSystemCacheControl, type LLMManager } from "@finn/llm";
+import { withAnthropicSystemCacheControl, withAnthropicToolCacheControl, type LLMManager } from "@finn/llm";
 import { stepCountIs, streamText, tool, type ModelMessage, type StopCondition, type SystemModelMessage, type ToolSet, type UserModelMessage } from "ai";
 import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
@@ -1289,7 +1289,7 @@ export class HotPathAgent {
           model: this.deps.llmManager.getModel("hot-path"),
           system: this.buildSystemPrompt(systemPrompt, dynamicContext),
           messages: conversationHistory,
-          tools: scopedTools,
+          tools: withAnthropicToolCacheControl(scopedTools),
           ...this.deps.llmManager.getRequestOptions("hot-path", historyState.conversation.rootConversationId),
           prepareStep: ({ stepNumber, steps }) => {
             const activeToolNames = getActiveHotPathToolNamesForStep({

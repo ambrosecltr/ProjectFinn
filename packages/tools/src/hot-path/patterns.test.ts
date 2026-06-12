@@ -35,6 +35,26 @@ describe("createReminderTools", () => {
     setSystemTime();
   });
 
+  it("keeps reminder tool descriptions stable across turns for prompt caching", () => {
+    const ops = {
+      user: { timezone: "Australia/Brisbane" },
+      create: async () => basePattern,
+      list: async () => [],
+      update: async () => null,
+      remove: async () => null,
+    };
+
+    setSystemTime(new Date("2026-05-08T10:00:00.000Z"));
+    const firstDescription = (createReminderTools(ops).create_reminder as { description?: string }).description;
+
+    setSystemTime(new Date("2026-05-08T10:05:00.000Z"));
+    const secondDescription = (createReminderTools(ops).create_reminder as { description?: string }).description;
+
+    expect(firstDescription).toBe(secondDescription);
+    expect(firstDescription).toContain("Use the current user-local time from runtime context.");
+    expect(firstDescription).not.toContain("2026-05-08");
+  });
+
   it("creates lightweight reminders without Pattern worker scope", async () => {
     const create = mock(async (params): Promise<PatternRecord> => ({
       ...basePattern,

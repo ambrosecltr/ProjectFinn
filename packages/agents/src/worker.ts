@@ -16,7 +16,7 @@ import {
   type PatternNotifyOutcome,
   type WorkerToolOutputArtifactStore,
 } from "@finn/core";
-import { getAbortErrorMessage, withAnthropicSystemCacheControl, type LLMManager, type LLMRequestOptions } from "@finn/llm";
+import { getAbortErrorMessage, withAnthropicSystemCacheControl, withAnthropicToolCacheControl, type LLMManager, type LLMRequestOptions } from "@finn/llm";
 import { generateText, tool, type ModelMessage, type StopCondition, type ToolResultPart, type ToolSet } from "ai";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -1032,7 +1032,7 @@ export class WorkerAgent {
             model: this.model,
             system: withAnthropicSystemCacheControl(this.buildSystemPrompt()),
             messages,
-            tools,
+            tools: withAnthropicToolCacheControl(tools),
             ...this.requestOptions,
             stopWhen: stopAfterOneStep,
             abortSignal: this.abortSignal,
@@ -1079,7 +1079,7 @@ export class WorkerAgent {
           model: this.model,
           system: withAnthropicSystemCacheControl([this.buildSystemPrompt(), workerFinalizationPrompt].join("\n\n")),
           messages: finalizationMessages,
-          tools,
+          tools: withAnthropicToolCacheControl(tools),
           activeTools: ["set_status"],
           ...(this.forceToolChoice ? { toolChoice: "required" as const } : {}),
           ...this.requestOptions,
@@ -1117,7 +1117,7 @@ export class WorkerAgent {
                 ].join("\n\n"),
               },
             ],
-            tools,
+            tools: withAnthropicToolCacheControl(tools),
             activeTools: ["set_status"],
             ...(this.forceToolChoice ? { toolChoice: "required" as const } : {}),
             ...this.requestOptions,

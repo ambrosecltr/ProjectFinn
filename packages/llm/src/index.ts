@@ -1,6 +1,6 @@
 export { LLMManager } from "./manager.js";
 export type { LLMRequestOptions } from "./manager.js";
-export { withAnthropicSystemCacheControl } from "./cache-control.js";
+export { withAnthropicSystemCacheControl, withAnthropicToolCacheControl } from "./cache-control.js";
 export { getAbortErrorMessage, withLLMTimeout } from "./timeout.js";
 export type { LLMTimeoutOptions } from "./timeout.js";
 export { getProvider } from "./providers.js";

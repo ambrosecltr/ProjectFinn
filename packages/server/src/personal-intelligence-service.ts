@@ -2,7 +2,7 @@ import { compactWorkerLoopMessages, compactWorkerMessagesWithCheckpoint, wrapToo
 import { createFinnTelemetry, createFinnTelemetryContext, createLogger, estimateTokens, getTracer, normalizePhoneNumber, truncate, withSpan, type AppConfig, type UserContext, type WorkerToolOutputArtifactStore } from "@finn/core";
 import type { Database, StoredPersonalIntelligenceCheckpoint, UserConnectorConfig } from "@finn/db";
 import type { MemoryMetadata, MemoryRecorder } from "@finn/integrations";
-import { getAbortErrorMessage, withAnthropicSystemCacheControl, withLLMTimeout, type LLMManager } from "@finn/llm";
+import { getAbortErrorMessage, withAnthropicSystemCacheControl, withAnthropicToolCacheControl, withLLMTimeout, type LLMManager } from "@finn/llm";
 import { createToolsetRuntime, type CodeModeToolsetSummary } from "@finn/toolsets";
 import { createProcessRuntimeServices, type MemoryRuntimeService, type ProcessRuntimeServices, type UserRuntimeServices } from "@finn/runtime";
 import { generateText, tool, type ModelMessage, type ToolSet } from "ai";
@@ -1174,7 +1174,7 @@ export class PersonalIntelligenceService {
           model: this.deps.llmManager.getModel("worker"),
           system: withAnthropicSystemCacheControl(systemPrompt),
           messages,
-          tools,
+          tools: withAnthropicToolCacheControl(tools),
           ...this.deps.llmManager.getRequestOptions("worker", input.runId),
           stopWhen: stopAfterOneStep,
           experimental_telemetry: createFinnTelemetry({
@@ -1242,9 +1242,9 @@ export class PersonalIntelligenceService {
         model: this.deps.llmManager.getModel("worker"),
         system: withAnthropicSystemCacheControl([systemPrompt, personalIntelligenceFinalizationPrompt].join("\n\n")),
         messages: finalizationMessages,
-        tools: {
+        tools: withAnthropicToolCacheControl({
           [finishPersonalIntelligenceRunToolName]: finishRunTool,
-        },
+        }),
         activeTools: [finishPersonalIntelligenceRunToolName],
         ...(this.deps.config.llm.forceToolChoice ? { toolChoice: "required" as const } : {}),
         ...this.deps.llmManager.getRequestOptions("worker", input.runId),

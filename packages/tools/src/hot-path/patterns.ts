@@ -357,8 +357,7 @@ export function createReminderTools(ops: PatternOps): ToolSet {
       description:
         `Create a lightweight reminder Pattern that only notifies the hot path when due and does not start a worker or LLM Pattern run. ` +
         `Use this only for simple reminders that do not need external tools, research, decisions, or actions. ` +
-        `Current user-local time: ${formatRuntimeTimestamp(new Date(), effectiveTimeZone)} (${effectiveTimeZone}). ` +
-        `All schedule values are interpreted in the user's current effective timezone.`,
+        `Use the current user-local time from runtime context. All schedule values are interpreted in the user's current effective timezone.`,
       inputSchema: createReminderInputSchema,
       execute: async (input) => withSpan(tracer, "tool.create_reminder", {}, async (span) => {
         const scheduled = buildScheduledTriggerParams(input, effectiveTimeZone);
