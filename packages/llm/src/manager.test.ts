@@ -42,10 +42,16 @@ describe("LLMManager request options", () => {
     });
   });
 
-  it("does not add Fireworks-only options for other providers", () => {
+  it("adds Anthropic automatic prompt caching by default", () => {
     const manager = new LLMManager(createConfig("anthropic"));
 
-    expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({});
+    expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({
+      providerOptions: {
+        anthropic: {
+          cacheControl: { type: "ephemeral" },
+        },
+      },
+    });
   });
 
   it("does not add provider-specific options for OpenAI-compatible providers", () => {
@@ -75,7 +81,7 @@ describe("LLMManager request options", () => {
     expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({});
   });
 
-  it("adds Anthropic effort options when reasoning effort is configured", () => {
+  it("adds Anthropic effort options alongside automatic prompt caching when reasoning effort is configured", () => {
     const config = createConfig("anthropic");
     config.models.worker.reasoningEffort = "medium";
     const manager = new LLMManager(config);
@@ -83,6 +89,7 @@ describe("LLMManager request options", () => {
     expect(manager.getRequestOptions("worker", "wrk_123")).toEqual({
       providerOptions: {
         anthropic: {
+          cacheControl: { type: "ephemeral" },
           effort: "medium",
         },
       },

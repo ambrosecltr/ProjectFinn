@@ -137,11 +137,13 @@ export class LLMManager {
       };
     }
 
-    if (modelConfig.provider === "anthropic" && modelConfig.reasoningEffort) {
+    if (modelConfig.provider === "anthropic") {
       requestOptions.providerOptions = {
         ...requestOptions.providerOptions,
         anthropic: {
-          effort: modelConfig.reasoningEffort,
+          ...requestOptions.providerOptions?.anthropic,
+          cacheControl: { type: "ephemeral" },
+          ...(modelConfig.reasoningEffort ? { effort: modelConfig.reasoningEffort } : {}),
         } satisfies AnthropicLanguageModelOptions,
       };
     }
