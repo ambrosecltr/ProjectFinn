@@ -16,8 +16,7 @@ import {
   type PatternNotifyOutcome,
   type WorkerToolOutputArtifactStore,
 } from "@finn/core";
-import type { LLMManager, LLMRequestOptions } from "@finn/llm";
-import { getAbortErrorMessage } from "@finn/llm";
+import { getAbortErrorMessage, withAnthropicSystemCacheControl, type LLMManager, type LLMRequestOptions } from "@finn/llm";
 import { generateText, tool, type ModelMessage, type StopCondition, type ToolResultPart, type ToolSet } from "ai";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -562,7 +561,7 @@ async function summarizeWorkerMessages(
 
   const result = await generateText({
     model: options.model,
-    system: options.compactionPrompt ?? workerContextCompactionPrompt,
+    system: withAnthropicSystemCacheControl(options.compactionPrompt ?? workerContextCompactionPrompt),
     prompt: [
       "Create a checkpoint summary for this older worker transcript segment.",
       "The original task/context and the most recent verbatim messages will remain available separately; summarize only what must survive from this omitted segment.",
@@ -1031,7 +1030,7 @@ export class WorkerAgent {
 
           const result = await generateText({
             model: this.model,
-            system: this.buildSystemPrompt(),
+            system: withAnthropicSystemCacheControl(this.buildSystemPrompt()),
             messages,
             tools,
             ...this.requestOptions,
@@ -1078,7 +1077,7 @@ export class WorkerAgent {
 
         let finalizationResult = await generateText({
           model: this.model,
-          system: [this.buildSystemPrompt(), workerFinalizationPrompt].join("\n\n"),
+          system: withAnthropicSystemCacheControl([this.buildSystemPrompt(), workerFinalizationPrompt].join("\n\n")),
           messages: finalizationMessages,
           tools,
           activeTools: ["set_status"],
@@ -1106,7 +1105,7 @@ export class WorkerAgent {
         if (!outcome && hasFailedStatusReport(finalizationResult.steps.flatMap((step) => step.toolResults ?? []))) {
           finalizationResult = await generateText({
             model: this.model,
-            system: [this.buildSystemPrompt(), workerFinalizationPrompt].join("\n\n"),
+            system: withAnthropicSystemCacheControl([this.buildSystemPrompt(), workerFinalizationPrompt].join("\n\n")),
             messages: [
               ...finalizationCheckpoint,
               {

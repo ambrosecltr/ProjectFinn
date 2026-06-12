@@ -14,7 +14,7 @@ import {
 } from "@finn/core";
 import type { Database } from "@finn/db";
 import * as schema from "@finn/db";
-import type { LLMManager } from "@finn/llm";
+import { withAnthropicSystemCacheControl, type LLMManager } from "@finn/llm";
 import { generateText, stepCountIs } from "ai";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
@@ -161,8 +161,6 @@ export class Compactor {
         .map((turn) => `${turn.role}: ${sanitizeModelVisibleWorkspacePaths(turn.content)}`)
         .join("\n");
       const prompt = [
-        compactorPromptTemplate,
-        "",
         `Compaction mode: ${opts.aggressive ? "aggressive" : "normal"}`,
         "Create the replacement summary for this older conversation excerpt.",
         "",
@@ -171,6 +169,7 @@ export class Compactor {
 
       const result = await generateText({
         model: this.deps.llmManager.getModel("compactor"),
+        system: withAnthropicSystemCacheControl(compactorPromptTemplate),
         prompt,
         ...this.deps.llmManager.getRequestOptions("compactor", conversationId),
         stopWhen: stepCountIs(this.deps.config.maxTurns.compactor),

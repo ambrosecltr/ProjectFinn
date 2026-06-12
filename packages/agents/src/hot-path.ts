@@ -28,7 +28,7 @@ import {
 } from "@finn/core";
 import type { MemoryRuntimeService } from "@finn/runtime";
 import type { Database } from "@finn/db";
-import type { LLMManager } from "@finn/llm";
+import { withAnthropicSystemCacheControl, type LLMManager } from "@finn/llm";
 import { stepCountIs, streamText, tool, type ModelMessage, type StopCondition, type SystemModelMessage, type ToolSet, type UserModelMessage } from "ai";
 import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
@@ -1816,13 +1816,13 @@ export class HotPathAgent {
 
   private buildSystemPrompt(systemPrompt: string, dynamicContext: string): string | SystemModelMessage[] {
     if (dynamicContext.trim().length > 0) {
-      return [
+      return withAnthropicSystemCacheControl([
         { role: "system", content: systemPrompt },
         { role: "system", content: dynamicContext },
-      ];
+      ]);
     }
 
-    return systemPrompt;
+    return withAnthropicSystemCacheControl(systemPrompt);
   }
 
   private appendRuntimeContextToCurrentTurn(content: CurrentTurnUserContent, runtimeContext: string): CurrentTurnUserContent {

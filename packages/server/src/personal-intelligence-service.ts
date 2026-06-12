@@ -2,7 +2,7 @@ import { compactWorkerLoopMessages, compactWorkerMessagesWithCheckpoint, wrapToo
 import { createFinnTelemetry, createFinnTelemetryContext, createLogger, estimateTokens, getTracer, normalizePhoneNumber, truncate, withSpan, type AppConfig, type UserContext, type WorkerToolOutputArtifactStore } from "@finn/core";
 import type { Database, StoredPersonalIntelligenceCheckpoint, UserConnectorConfig } from "@finn/db";
 import type { MemoryMetadata, MemoryRecorder } from "@finn/integrations";
-import { getAbortErrorMessage, withLLMTimeout, type LLMManager } from "@finn/llm";
+import { getAbortErrorMessage, withAnthropicSystemCacheControl, withLLMTimeout, type LLMManager } from "@finn/llm";
 import { createToolsetRuntime, type CodeModeToolsetSummary } from "@finn/toolsets";
 import { createProcessRuntimeServices, type MemoryRuntimeService, type ProcessRuntimeServices, type UserRuntimeServices } from "@finn/runtime";
 import { generateText, tool, type ModelMessage, type ToolSet } from "ai";
@@ -1172,7 +1172,7 @@ export class PersonalIntelligenceService {
         });
         const generated = await generateText({
           model: this.deps.llmManager.getModel("worker"),
-          system: systemPrompt,
+          system: withAnthropicSystemCacheControl(systemPrompt),
           messages,
           tools,
           ...this.deps.llmManager.getRequestOptions("worker", input.runId),
@@ -1240,7 +1240,7 @@ export class PersonalIntelligenceService {
       });
       const finalizationResult = await generateText({
         model: this.deps.llmManager.getModel("worker"),
-        system: [systemPrompt, personalIntelligenceFinalizationPrompt].join("\n\n"),
+        system: withAnthropicSystemCacheControl([systemPrompt, personalIntelligenceFinalizationPrompt].join("\n\n")),
         messages: finalizationMessages,
         tools: {
           [finishPersonalIntelligenceRunToolName]: finishRunTool,

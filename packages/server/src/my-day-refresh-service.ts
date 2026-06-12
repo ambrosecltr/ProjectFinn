@@ -1,7 +1,7 @@
 import { wrapToolsWithOutputArtifacts } from "@finn/agents";
 import { createFinnTelemetry, createLogger, type AppConfig, type AutomationRunRecord, type MyDayTodoRecord, type MyDayTodoSource, type UserContext } from "@finn/core";
 import type { Database } from "@finn/db";
-import { getAbortErrorMessage, withLLMTimeout, type LLMManager } from "@finn/llm";
+import { getAbortErrorMessage, withAnthropicSystemCacheControl, withLLMTimeout, type LLMManager } from "@finn/llm";
 import { generateText, stepCountIs, tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { createProcessRuntimeServices, type UserRuntimeServices } from "@finn/runtime";
@@ -305,7 +305,7 @@ export class MyDayRefreshService {
         timeoutMessage: `My Day refresh timed out after ${this.deps.config.backgroundLlmTimeoutMs}ms.`,
       }, (abortSignal) => generateText({
         model: this.deps.llmManager.getModel("worker"),
-        system: myDayRefreshSystemPrompt,
+        system: withAnthropicSystemCacheControl(myDayRefreshSystemPrompt),
         prompt: [
           `Current local time: ${formatLocalDateTime(now, user.timezone)}`,
           `Current UTC time: ${now.toISOString()}`,
