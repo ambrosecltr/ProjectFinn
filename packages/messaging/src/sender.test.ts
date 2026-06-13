@@ -135,7 +135,7 @@ describe("MessageSender", () => {
     }, { replyToMessageHandle: "msg_weather" });
   });
 
-  it("marks read through the current recipient even though Spectrum currently no-ops it", async () => {
+  it("marks read through the current recipient", async () => {
     const client = {
       markRead: mock(async () => undefined),
     };

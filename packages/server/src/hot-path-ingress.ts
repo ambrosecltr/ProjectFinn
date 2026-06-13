@@ -8,15 +8,19 @@ type MessageHandler = {
   handleMessage(message: InboundMessage): Promise<string | null>;
 };
 
+type UserTurnAcceptedHandler = (message: UserMessage) => Promise<void> | void;
+
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 export interface HotPathIngressCoordinatorDeps {
   config: Pick<AppConfig, "hotPathIngress">;
   handler: MessageHandler;
+  onUserTurnAccepted?: UserTurnAcceptedHandler;
 }
 
 export class HotPathIngressCoordinator {
   private readonly handler: MessageHandler;
+  private readonly onUserTurnAccepted?: UserTurnAcceptedHandler;
   private readonly userGroupingWindowMs: number;
   private readonly maxCoalesceMessages: number;
 
@@ -30,6 +34,7 @@ export class HotPathIngressCoordinator {
 
   constructor(deps: HotPathIngressCoordinatorDeps) {
     this.handler = deps.handler;
+    this.onUserTurnAccepted = deps.onUserTurnAccepted;
     this.userGroupingWindowMs = deps.config.hotPathIngress.userGroupingWindowMs;
     this.maxCoalesceMessages = deps.config.hotPathIngress.maxCoalesceMessages;
   }
@@ -105,6 +110,7 @@ export class HotPathIngressCoordinator {
     this.turnInFlight = true;
 
     try {
+      this.notifyUserTurnAccepted(nextMessage);
       await this.handler.handleMessage(nextMessage);
     } catch (error) {
       logger.error({ error, source: nextMessage.source }, "Failed to process queued inbound message");
@@ -114,6 +120,20 @@ export class HotPathIngressCoordinator {
 
     if (this.hasPendingWork()) {
       this.scheduleDrain();
+    }
+  }
+
+  private notifyUserTurnAccepted(message: InboundMessage): void {
+    if (message.source !== "user" || !this.onUserTurnAccepted) {
+      return;
+    }
+
+    try {
+      void Promise.resolve(this.onUserTurnAccepted(message)).catch((error) => {
+        logger.warn({ error, messageId: message.messageId }, "Failed to mark accepted user turn as read");
+      });
+    } catch (error) {
+      logger.warn({ error, messageId: message.messageId }, "Failed to mark accepted user turn as read");
     }
   }
 

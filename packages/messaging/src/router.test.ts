@@ -130,6 +130,43 @@ describe("MessageRouter", () => {
     expect(message?.attachments?.map((attachment) => attachment.filename)).toEqual(["photo-1.jpg", "photo-2.jpg"]);
   });
 
+  it("routes Spectrum patched caption groups into one user message", async () => {
+    const router = new MessageRouter();
+    const data = Buffer.from("image bytes");
+    const message = await router.routeSpectrumMessage(createMessage({
+      type: "group",
+      items: [
+        {
+          ...createMessage({ type: "text", text: "look at this" }),
+          id: "p:0/msg_123",
+          parentId: "msg_123",
+          partIndex: 0,
+        },
+        {
+          ...createMessage({
+            type: "attachment",
+            name: "photo.jpg",
+            mimeType: "image/jpeg",
+            size: data.length,
+            read: async () => data,
+            stream: async () => new ReadableStream(),
+          }),
+          id: "p:1/msg_123",
+          parentId: "msg_123",
+          partIndex: 1,
+        },
+      ],
+    }) as never, user);
+
+    expect(message?.content).toBe("look at this");
+    expect(message?.attachments).toHaveLength(1);
+    expect(message?.attachments?.[0]).toMatchObject({
+      url: "spectrum:p:1/msg_123",
+      filename: "photo.jpg",
+      data,
+    });
+  });
+
   it("recovers raw caption text from Spectrum grouped attachment parents", async () => {
     const router = new MessageRouter();
     const data = Buffer.from("image bytes");

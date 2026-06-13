@@ -29,11 +29,11 @@ There are four main messaging components:
 
 ## Spectrum SDK Patch
 
-Finn carries a Bun patch for `spectrum-ts@2.0.0` at `patches/spectrum-ts@2.0.0.patch`.
+Finn carries a Bun patch for `spectrum-ts@4.2.0` at `patches/spectrum-ts@4.2.0.patch`.
 
-The patch exists because Spectrum's iMessage provider can drop or reshape metadata when inbound iMessages contain attachments. Without it, text+photo sends can arrive in Finn as an image-only turn, losing the user's caption, and voice attachments may not carry the content shape Finn's attachment processor expects. The patch keeps text/caption metadata available and preserves voice attachment handling, while `MessageRouter` also has a fallback that recovers text/caption fields from raw/custom/group-shaped Spectrum payloads.
+The patch exists because Spectrum's iMessage provider can drop text when inbound iMessages contain attachments. Without it, text+photo sends can arrive in Finn as an image-only turn, losing the user's caption. The patch strips Apple's attachment placeholder characters and models caption + attachment payloads as Spectrum `group` content so `MessageRouter` can route the caption and media as one user turn.
 
-Remove the patch only after Spectrum upstream preserves text on iMessage attachment/grouped attachment messages and voice attachment handling. Before removing it, run the `MessageRouter` caption and attachment processor voice regression tests without the patch and confirm they still pass.
+Remove the patch only after Spectrum upstream preserves text on iMessage attachment/grouped attachment messages. Before removing it, run the `MessageRouter` caption and attachment regression tests without the patch and confirm they still pass.
 
 ## Why Ingress Coalescing Exists
 

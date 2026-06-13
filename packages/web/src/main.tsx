@@ -1388,7 +1388,7 @@ function App() {
       return;
     }
 
-    const firstMessage = "hey finn, i'm here. help me settle in and keep an eye on what matters today.";
+    const firstMessage = "sup dude!";
     setOnboardingCompleting(true);
     if (showOnboardingDemo) {
       const completedAt = new Date().toISOString();

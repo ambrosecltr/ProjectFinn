@@ -791,6 +791,7 @@ export class UserRuntimeRegistry {
     const ingress = new HotPathIngressCoordinator({
       config,
       handler: voiceAwareAgent,
+      onUserTurnAccepted: () => messageSender.markRead(),
     });
     const stopConversationMaintenance = startConversationMaintenance(user, config, compactor);
 

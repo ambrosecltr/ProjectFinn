@@ -52,6 +52,65 @@ describe("HotPathIngressCoordinator", () => {
     expect(userMessage.messageId).toBe("msg2");
   });
 
+  it("marks a coalesced user turn accepted once when dispatching it", async () => {
+    const handled: InboundMessage[] = [];
+    const accepted: UserMessage[] = [];
+    const ingress = new HotPathIngressCoordinator({
+      config: {
+        hotPathIngress: {
+          userGroupingWindowMs: 20,
+          maxCoalesceMessages: 5,
+        },
+      },
+      handler: {
+        async handleMessage(message) {
+          handled.push(message);
+          return null;
+        },
+      },
+      onUserTurnAccepted(message) {
+        accepted.push(message);
+      },
+    });
+
+    ingress.enqueueUser(createUserMessage("msg1", "first"));
+    ingress.enqueueUser(createUserMessage("msg2", "second"));
+
+    await flush(35);
+
+    expect(handled).toHaveLength(1);
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]?.parts?.map((part) => part.messageId)).toEqual(["msg1", "msg2"]);
+    expect(accepted[0]?.messageId).toBe("msg2");
+  });
+
+  it("keeps dispatching a user turn when marking it accepted fails", async () => {
+    const handled: InboundMessage[] = [];
+    const ingress = new HotPathIngressCoordinator({
+      config: {
+        hotPathIngress: {
+          userGroupingWindowMs: 5,
+          maxCoalesceMessages: 5,
+        },
+      },
+      handler: {
+        async handleMessage(message) {
+          handled.push(message);
+          return null;
+        },
+      },
+      onUserTurnAccepted() {
+        throw new Error("read receipt failed");
+      },
+    });
+
+    ingress.enqueueUser(createUserMessage("msg1", "first"));
+
+    await flush(15);
+
+    expect(handled).toHaveLength(1);
+  });
+
   it("preserves per-part reply targets when coalescing user messages", async () => {
     const handled: InboundMessage[] = [];
     const ingress = new HotPathIngressCoordinator({

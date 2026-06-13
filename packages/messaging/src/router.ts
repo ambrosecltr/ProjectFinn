@@ -72,8 +72,8 @@ export class MessageRouter {
       return null;
     }
 
-    // Spectrum iMessage attachment messages rely on Finn's SDK patch to retain
-    // caption text as provider metadata until upstream preserves it.
+    // Keep accepting older/raw Spectrum caption shapes alongside the patched
+    // grouped shape until upstream caption handling is available everywhere.
     const rawText = this.extractRawText(message);
     if (!rawText || content.text.includes(rawText)) {
       return content;

@@ -461,7 +461,6 @@ export interface MessageSender {
   sendTypingIndicator(): Promise<void> | void;
   startTyping?(): Promise<void> | void;
   stopTyping?(): Promise<void> | void;
-  markRead(): Promise<void> | void;
 }
 
 export type { ToolSet };
@@ -1207,9 +1206,6 @@ export class HotPathAgent {
       "message.id": this.getSourceMessageId(message),
     }, async (span) => {
       const source = message.source;
-      if (source === "user") {
-        void this.markRead();
-      }
       await this.startTyping();
 
       const historyState = await this.conversationStore.hydrateActiveConversation();
@@ -1863,14 +1859,6 @@ export class HotPathAgent {
           }),
           { escapeContent: true },
         );
-    }
-  }
-
-  private async markRead(): Promise<void> {
-    try {
-      await this.deps.sender.markRead();
-    } catch (error) {
-      this.logger.warn({ error }, "Failed to mark inbound message as read");
     }
   }
 

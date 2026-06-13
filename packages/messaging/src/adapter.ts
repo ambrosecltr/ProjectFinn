@@ -64,6 +64,7 @@ export class SpectrumClient {
   private readonly spacesByRecipient = new Map<string, Space>();
   private readonly linePhonesByRecipient = new Map<string, string>();
   private readonly messagesById = new Map<string, Message>();
+  private readonly readTargetsByRecipient = new Map<string, Message>();
   private readonly sendQueuesByRecipient = new Map<string, Promise<void>>();
 
   constructor(private readonly config: SpectrumClientConfig) {
@@ -106,6 +107,7 @@ export class SpectrumClient {
     } finally {
       this.spacesByRecipient.clear();
       this.messagesById.clear();
+      this.readTargetsByRecipient.clear();
       if (options.clearRecipientLines) {
         this.linePhonesByRecipient.clear();
       }
@@ -129,6 +131,7 @@ export class SpectrumClient {
       this.linePhonesByRecipient.set(recipient, linePhone);
     }
     this.messagesById.set(message.id, message);
+    this.readTargetsByRecipient.set(recipient, message);
   }
 
   rememberRecipientLine(recipient: string, linePhone: string | null | undefined): void {
@@ -310,8 +313,10 @@ export class SpectrumClient {
     await space.stopTyping();
   }
 
-  async markRead(_to: string): Promise<void> {
-    // Spectrum's public Space API does not expose mark-read for iMessage.
+  async markRead(to: string): Promise<void> {
+    await this.withSendSlot("markRead", to, { to }, async () => {
+      await this.readTargetsByRecipient.get(to)?.read();
+    });
   }
 
   private async resolveMessage(to: string, messageId: string): Promise<Message> {
@@ -349,8 +354,8 @@ export class SpectrumClient {
     const user = await im.user(to);
     const linePhone = this.linePhonesByRecipient.get(to) ?? this.config.dedicatedLinePhone;
     const space = linePhone
-      ? await im.space(user, { phone: linePhone })
-      : await im.space(user);
+      ? await im.space.create(user, { phone: linePhone })
+      : await im.space.create(user);
     this.spacesByRecipient.set(to, space);
     return space;
   }

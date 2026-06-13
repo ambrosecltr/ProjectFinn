@@ -105,6 +105,68 @@ describe("SpectrumClient replies", () => {
     });
   });
 
+  it("resolves uncached outbound DMs through the Spectrum v4 space namespace", async () => {
+    const sendText = mock(async () => ({
+      guid: "out_uncached",
+      dateCreated: new Date("2026-05-09T00:00:00.000Z"),
+    }));
+    const remote = { messages: { sendText } };
+    const app = {
+      __providers: [],
+      __internal: {
+        platforms: new Map([[
+          "iMessage",
+          {
+            client: [{ phone: "shared", client: remote }],
+            config: { local: false },
+            store: new Map(),
+          },
+        ]]),
+      },
+    };
+    const client = new SpectrumClient({ projectId: "project", projectSecret: "secret", dedicatedLinePhone: undefined });
+    const internals = client as unknown as { start: () => Promise<unknown> };
+    internals.start = mock(async () => app);
+
+    const result = await client.sendText("+15551234567", "hello");
+
+    expect(sendText).toHaveBeenCalledWith("any;-;+15551234567", "hello", {});
+    expect(result).toEqual({
+      messageIds: ["out_uncached"],
+      threaded: false,
+      fallback: false,
+    });
+  });
+
+  it("marks the latest remembered inbound message as read", async () => {
+    const first = {
+      id: "msg_first",
+      content: { type: "text", text: "first" },
+      timestamp: new Date("2026-05-09T00:00:00.000Z"),
+      read: mock(async () => undefined),
+    };
+    const latest = {
+      id: "msg_latest",
+      content: { type: "text", text: "latest" },
+      timestamp: new Date("2026-05-09T00:00:01.000Z"),
+      read: mock(async () => undefined),
+    };
+    const client = new SpectrumClient({ projectId: "project", projectSecret: "secret", dedicatedLinePhone: undefined });
+
+    client.rememberInboundMessage("+15551234567", { id: "space_123" } as never, first as never);
+    client.rememberInboundMessage("+15551234567", { id: "space_123" } as never, latest as never);
+    await client.markRead("+15551234567");
+
+    expect(first.read).not.toHaveBeenCalled();
+    expect(latest.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not require an inbound message before marking read", async () => {
+    const client = new SpectrumClient({ projectId: "project", projectSecret: "secret", dedicatedLinePhone: undefined });
+
+    await expect(client.markRead("+15551234567")).resolves.toBeUndefined();
+  });
+
   it("preserves assigned line routing while recreating the Spectrum app", async () => {
     const initialApp = { stop: mock(async () => undefined) };
     const restartedApp = { stop: mock(async () => undefined) };
@@ -114,11 +176,13 @@ describe("SpectrumClient replies", () => {
       spacesByRecipient: Map<string, unknown>;
       linePhonesByRecipient: Map<string, string>;
       messagesById: Map<string, unknown>;
+      readTargetsByRecipient: Map<string, unknown>;
       start: () => Promise<unknown>;
     };
     internals.app = initialApp;
     internals.spacesByRecipient.set("+15551234567", { id: "stale_space" });
     internals.messagesById.set("msg_stale", { id: "msg_stale" });
+    internals.readTargetsByRecipient.set("+15551234567", { id: "msg_stale" });
     client.rememberRecipientLine("+15551234567", "+15550001111");
     internals.start = mock(async () => {
       internals.app = restartedApp;
@@ -132,5 +196,6 @@ describe("SpectrumClient replies", () => {
     expect(internals.linePhonesByRecipient.get("+15551234567")).toBe("+15550001111");
     expect(internals.spacesByRecipient.size).toBe(0);
     expect(internals.messagesById.size).toBe(0);
+    expect(internals.readTargetsByRecipient.size).toBe(0);
   });
 });

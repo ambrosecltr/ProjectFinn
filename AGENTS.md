@@ -82,7 +82,7 @@ core ←── db ←── messaging, media, cron, patterns, agents, runtime
 - **Workspace**: Repo root is the Bun workspace root. Run commands from `FinnAI/`.
 - **Runtime**: Bun — runs TypeScript directly. No transpile step for dev.
 - **Module imports**: `@finn/*` path aliases (tsconfig.json paths). `workspace:*` deps in package.json.
-- **Patched dependencies**: `spectrum-ts@2.0.0` is patched via `patches/spectrum-ts@2.0.0.patch`. The patch preserves iMessage text/caption metadata so `MessageRouter` can route mixed text+photo sends correctly and keeps voice attachment handling aligned with Finn's attachment processor. Remove this patch only after Spectrum upstream preserves text on iMessage attachment/group messages and the router/attachment caption and voice regression tests pass without it.
+- **Patched dependencies**: `spectrum-ts@4.2.0` is patched via `patches/spectrum-ts@4.2.0.patch`. The patch preserves iMessage captions by modeling caption + attachment payloads as Spectrum grouped content and stripping Apple's attachment placeholder characters. Remove this patch only after Spectrum upstream preserves text on iMessage attachment/group messages and the router caption/attachment regression tests pass without it.
 - **Server export**: `packages/server/src/index.ts` exports `{ port, fetch }` — Bun's native fetch handler pattern (no `app.listen()`).
 - **Single-process workers**: Workers run in-process via WorkerManager — no separate queue/process. CPU-bound work impacts the server.
 - **Config pattern**: Zod-validated at startup via `loadConfig()`. Cached singleton. Test helper: `resetConfig()`.

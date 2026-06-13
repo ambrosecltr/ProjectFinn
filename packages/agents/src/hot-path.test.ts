@@ -85,7 +85,6 @@ function createMemoryTestAgent(memory: MemoryTestClient): HotPathAgent {
       sendVoiceMessage: async () => undefined,
       sendReaction: async () => undefined,
       sendTypingIndicator: async () => undefined,
-      markRead: async () => undefined,
     },
     db: {},
     config: {
@@ -112,7 +111,6 @@ function createPromptBudgetTestAgent(): HotPathAgent {
       sendVoiceMessage: async () => undefined,
       sendReaction: async () => undefined,
       sendTypingIndicator: async () => undefined,
-      markRead: async () => undefined,
     },
     db: {},
     config: {
