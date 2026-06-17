@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import type { ModelMessage } from "ai";
+import { asSchema, type ModelMessage } from "ai";
 import type { WorkerRecord } from "@finn/core";
 
-import { buildWorkerResumeCheckpoint, compactWorkerLoopMessages, compactWorkerMessages, compactWorkerMessagesWithCheckpoint, createOutcomeRecorder, finalizeFallbackWorkerOutcome, getImplicitOutcomeFromToolResults, WorkerAgent } from "./worker.js";
+import { buildWorkerResumeCheckpoint, compactWorkerLoopMessages, compactWorkerMessages, compactWorkerMessagesWithCheckpoint, createOutcomeRecorder, finalizeFallbackWorkerOutcome, getImplicitOutcomeFromToolResults, setStatusSchema, WorkerAgent } from "./worker.js";
 import { WorkerFollowUpUnavailableError, WorkerManager } from "./worker-manager.js";
 
 const baseUser = {
@@ -210,6 +210,26 @@ function createWorkerManager(db: unknown, eventBus: { emit: (event: unknown) => 
     user: baseUser,
   });
 }
+
+describe("WorkerAgent set_status schema", () => {
+  it("sends OpenAI-compatible parameters as a top-level object", async () => {
+    const jsonSchema = await asSchema(setStatusSchema).jsonSchema;
+
+    expect(jsonSchema).toMatchObject({
+      type: "object",
+      required: ["kind", "detail"],
+    });
+    expect(Object.hasOwn(jsonSchema, "anyOf")).toBe(false);
+    expect(Object.hasOwn(jsonSchema, "oneOf")).toBe(false);
+  });
+
+  it("keeps kind-specific status detail validation", () => {
+    expect(setStatusSchema.safeParse({ kind: "working", detail: "checking inbox" }).success).toBe(true);
+    expect(setStatusSchema.safeParse({ kind: "outcome", detail: { summary: "Found the answer." } }).success).toBe(true);
+    expect(setStatusSchema.safeParse({ kind: "working", detail: { summary: "Not valid for progress." } }).success).toBe(false);
+    expect(setStatusSchema.safeParse({ kind: "outcome", detail: "done" }).success).toBe(false);
+  });
+});
 
 describe("WorkerManager cancellation", () => {
   it("aborts active general workers cancelled by the hot path", async () => {

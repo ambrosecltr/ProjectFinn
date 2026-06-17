@@ -37,16 +37,39 @@ const patternOutcomeDetailSchema = z.object({
   error: z.string().optional(),
 });
 
-const setStatusSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("working"),
-    detail: z.string().min(1),
-  }),
-  z.object({
-    kind: z.literal("outcome"),
-    detail: z.union([patternOutcomeDetailSchema, outcomeDetailSchema]),
-  }),
+const setStatusDetailSchema = z.union([
+  z.string().min(1),
+  patternOutcomeDetailSchema,
+  outcomeDetailSchema,
 ]);
+
+export const setStatusSchema = z.object({
+  kind: z.enum(["working", "outcome"]),
+  detail: setStatusDetailSchema,
+}).superRefine((input, ctx) => {
+  if (input.kind === "working" && typeof input.detail !== "string") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["detail"],
+      message: "Working status detail must be a non-empty string.",
+    });
+  }
+
+  if (input.kind === "outcome" && typeof input.detail === "string") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["detail"],
+      message: "Outcome status detail must be an object.",
+    });
+  }
+});
+
+type SetStatusDetail = z.infer<typeof setStatusDetailSchema>;
+type SetStatusOutcomeDetail = z.infer<typeof outcomeDetailSchema> | z.infer<typeof patternOutcomeDetailSchema>;
+
+function isOutcomeStatusDetail(detail: SetStatusDetail): detail is SetStatusOutcomeDetail {
+  return typeof detail === "object" && detail !== null && !Array.isArray(detail);
+}
 
 const workerPromptTemplate = loadIdentityFile("worker.xml", "./prompts");
 const patternManagementWorkerPromptTemplate = loadIdentityFile("pattern-management-worker.xml", "./prompts");
@@ -950,8 +973,16 @@ export class WorkerAgent {
           execute: async (input) => {
             try {
               if (input.kind === "working") {
+                if (typeof input.detail !== "string") {
+                  throw new Error("Working status detail must be a non-empty string.");
+                }
+
                 await this.onStatus("working", input.detail);
                 return { ok: true };
+              }
+
+              if (!isOutcomeStatusDetail(input.detail)) {
+                throw new Error("Outcome status detail must be an object.");
               }
 
               await recordOutcome(input.detail);
