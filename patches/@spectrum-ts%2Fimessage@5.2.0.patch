@@ -1,0 +1,178 @@
+diff --git a/dist/index.js b/dist/index.js
+index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c7f2acd64 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -463,6 +463,23 @@ const ATTACHMENT_JOIN_RETRY_DELAY_MS = 250;
+ const ATTACHMENT_JOIN_RETRY_LIMIT = 8;
+ const ATTACHMENT_JOIN_FETCH_LIMIT = 10;
+ const hasAttachmentPlaceholder = (message) => message.text?.includes(ATTACHMENT_PLACEHOLDER) ?? false;
++const textWithoutAttachmentPlaceholder = (message) => {
++	const text$1 = message.text?.replaceAll(ATTACHMENT_PLACEHOLDER, "").trim();
++	return text$1 ? text$1 : void 0;
++};
++const textMessage = (base, parentId, text$1) => ({
++	...base,
++	id: `${parentId}:text`,
++	content: asText(text$1),
++	parentId,
++	partIndex: 0
++});
++const attachmentMessage = async (base, messageId, attachment$1, groupPart) => ({
++	...base,
++	id: `${messageId}:${attachment$1.id}`,
++	content: await localAttachmentContent(attachment$1),
++	...groupPart ?? {}
++});
+ const isPendingAttachmentJoin = (message) => message.attachments.length === 0 && (message.hasAttachments || hasAttachmentPlaceholder(message));
+ const refetchUntilAttachmentsSettle = async (client, message) => {
+ 	if (!message.chatId) return message;
+@@ -500,11 +517,21 @@ const toMessages = async (message) => {
+ 		},
+ 		timestamp: message.createdAt
+ 	};
+-	if (message.attachments.length > 0) return Promise.all(message.attachments.map(async (att) => ({
+-		...base,
+-		id: `${message.id}:${att.id}`,
+-		content: await localAttachmentContent(att)
+-	})));
++	if (message.attachments.length > 0) {
++		const text$1 = textWithoutAttachmentPlaceholder(message);
++		const textOffset = text$1 ? 1 : 0;
++		const attachments = await Promise.all(message.attachments.map((att, index) => attachmentMessage(base, message.id, att, message.attachments.length > 1 || text$1 ? {
++			parentId: message.id,
++			partIndex: index + textOffset
++		} : void 0)));
++		if (!text$1 && attachments.length === 1) return attachments;
++		const items = text$1 ? [textMessage(base, message.id, text$1), ...attachments] : attachments;
++		return [{
++			...base,
++			id: message.id,
++			content: asProviderGroup(items)
++		}];
++	}
+ 	return [{
+ 		...base,
+ 		id: message.id,
+@@ -770,8 +797,13 @@ const getRemoteAttachment = async (client, guid) => {
+ //#region src/remote/inbound.ts
+ const log$2 = createLogger("spectrum.imessage.inbound");
+ const URL_BALLOON_BUNDLE_ID = "com.apple.messages.URLBalloonProvider";
++const REMOTE_ATTACHMENT_PLACEHOLDER = "￼";
+ const getBalloonBundleId = (message) => message.content.balloonBundleId;
+ const messageAttachments = (message) => message.content.attachments;
++const remoteTextWithoutAttachmentPlaceholder = (message) => {
++	const text$1 = message.content.text?.replaceAll(REMOTE_ATTACHMENT_PLACEHOLDER, "").trim();
++	return text$1 ? text$1 : void 0;
++};
+ const resolveChatGuid = (message, hint) => {
+ 	if (hint) return hint;
+ 	return message.chatGuids?.[0] ?? "";
+@@ -797,6 +829,13 @@ const asProviderGroup = (items) => groupSchema.parse({
+ 	type: "group",
+ 	items
+ });
++const buildTextMessage = (base, text$1, id, partIndex, parentId) => ({
++	...base,
++	id,
++	content: asText(text$1),
++	...partIndex === void 0 ? {} : { partIndex },
++	...parentId === void 0 ? {} : { parentId }
++});
+ const buildMessageBase = (message, chatGuidHint, timestamp, phone) => {
+ 	const chat = resolveChatGuid(message, chatGuidHint);
+ 	return {
+@@ -832,14 +871,33 @@ const toVCardContent = async (client, info) => {
+ const attachmentContent = async (client, info) => isVCardAttachment(info.mimeType, info.fileName) ? await toVCardContent(client, info) : toAttachmentContent(client, info);
+ const buildAttachmentMessage = async (client, base, info, id, partIndex, parentId) => {
+ 	const content = await attachmentContent(client, info);
+-	const msg = {
++	return {
+ 		...base,
+ 		id,
+ 		content,
+-		partIndex
++		partIndex,
++		...parentId === void 0 ? {} : { parentId }
++	};
++};
++const buildAttachmentItems = async (client, base, attachments, parentId, text$1) => {
++	const items = text$1 ? [buildTextMessage(base, text$1, formatChildId(0, parentId), 0, parentId)] : [];
++	const attachmentPartOffset = items.length;
++	for (let i = 0; i < attachments.length; i++) {
++		const info = attachments[i];
++		if (!info) continue;
++		const partIndex = i + attachmentPartOffset;
++		items.push(await buildAttachmentMessage(client, base, info, formatChildId(partIndex, parentId), partIndex, parentId));
++	}
++	return items;
++};
++const buildAttachmentMessageOrGroup = async (client, base, attachments, messageId, text$1) => {
++	const singleAttachment = attachments.length === 1 ? attachments[0] : void 0;
++	if (singleAttachment && !text$1) return buildAttachmentMessage(client, base, singleAttachment, messageId, 0);
++	return {
++		...base,
++		id: messageId,
++		content: asProviderGroup(await buildAttachmentItems(client, base, attachments, messageId, text$1))
+ 	};
+-	if (parentId !== void 0) msg.parentId = parentId;
+-	return msg;
+ };
+ const toRichlinkMessage = (message, base, id) => {
+ 	const url = message.content.text ?? "";
+@@ -865,24 +923,7 @@ const rebuildFromAppleMessage = async (client, message, phone, chatGuidHint) =>
+ 	const messageGuidStr = message.guid;
+ 	const base = buildMessageBase(message, chatGuidHint, message.dateCreated ?? /* @__PURE__ */ new Date(), phone);
+ 	const attachments = messageAttachments(message);
+-	if (attachments.length === 1) {
+-		const info = attachments[0];
+-		if (!info) throw new Error("Unreachable: attachments.length === 1 but no element");
+-		return buildAttachmentMessage(client, base, info, messageGuidStr, 0);
+-	}
+-	if (attachments.length > 1) {
+-		const items = [];
+-		for (let i = 0; i < attachments.length; i++) {
+-			const info = attachments[i];
+-			if (!info) continue;
+-			items.push(await buildAttachmentMessage(client, base, info, formatChildId(i, messageGuidStr), i, messageGuidStr));
+-		}
+-		return {
+-			...base,
+-			id: messageGuidStr,
+-			content: asProviderGroup(items)
+-		};
+-	}
++	if (attachments.length > 0) return buildAttachmentMessageOrGroup(client, base, attachments, messageGuidStr, remoteTextWithoutAttachmentPlaceholder(message));
+ 	if (getBalloonBundleId(message) === URL_BALLOON_BUNDLE_ID) return toRichlinkMessage(message, base, messageGuidStr);
+ 	const text = message.content.text;
+ 	return {
+@@ -906,28 +947,11 @@ const toInboundMessages = async (client, cache, event, phone) => {
+ 		return [msg];
+ 	}
+ 	const attachments = messageAttachments(event.message);
+-	if (attachments.length === 1) {
+-		const info = attachments[0];
+-		if (!info) throw new Error("Unreachable: attachments.length === 1 but no element");
+-		const msg = await buildAttachmentMessage(client, base, info, messageGuidStr, 0);
++	if (attachments.length > 0) {
++		const msg = await buildAttachmentMessageOrGroup(client, base, attachments, messageGuidStr, remoteTextWithoutAttachmentPlaceholder(event.message));
+ 		cacheMessage(cache, msg);
+ 		return [msg];
+ 	}
+-	if (attachments.length > 1) {
+-		const items = [];
+-		for (let i = 0; i < attachments.length; i++) {
+-			const info = attachments[i];
+-			if (!info) continue;
+-			items.push(await buildAttachmentMessage(client, base, info, formatChildId(i, messageGuidStr), i, messageGuidStr));
+-		}
+-		const parent = {
+-			...base,
+-			id: messageGuidStr,
+-			content: asProviderGroup(items)
+-		};
+-		cacheMessage(cache, parent);
+-		return [parent];
+-	}
+ 	const text = event.message.content.text;
+ 	const msg = {
+ 		...base,
