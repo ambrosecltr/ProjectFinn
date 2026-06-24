@@ -41,7 +41,7 @@
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
         "skills": "^1.5.1",
-        "spectrum-ts": "^5.2.0",
+        "spectrum-ts": "^6.1.1",
         "supermemory": "^4.21.1",
         "vite": "^7.3.0",
         "zod": "^3",
@@ -234,7 +234,7 @@
     },
   },
   "patchedDependencies": {
-    "@spectrum-ts/imessage@5.2.0": "patches/@spectrum-ts%2Fimessage@5.2.0.patch",
+    "@spectrum-ts/imessage@6.1.1": "patches/@spectrum-ts%2Fimessage@6.1.1.patch",
   },
   "packages": {
     "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.71", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-bUWOzrzR0gJKJO/PLGMR4uH2dqEgqGhrsCV+sSpk4KtOEnUQlfjZI/F7BFlqSvVpFbjdgYRRLysAeEZpJ6S1lg=="],
@@ -725,7 +725,7 @@
 
     "@petamoriken/float16": ["@petamoriken/float16@3.9.3", "", {}, "sha512-8awtpHXCx/bNpFt4mt2xdkgtgVvKqty8VbjHI/WWWQuEw+KLzFot3f4+LkQY9YmOtq7A5GdOnqoIC8Pdygjk2g=="],
 
-    "@photon-ai/advanced-imessage": ["@photon-ai/advanced-imessage@0.11.2", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@grpc/grpc-js": "^1.12.6", "nice-grpc": "^2.1.11", "nice-grpc-common": "^2.0.2" } }, "sha512-3mjzy1IIBtsCQK6kAB8dbFCK0np7hS256wwW+nqNL8vKz0W5nRhu1iKAwyZxP8Z470dtNX5RjNgcl9I4wZeuTA=="],
+    "@photon-ai/advanced-imessage": ["@photon-ai/advanced-imessage@0.12.0", "", { "dependencies": { "@bufbuild/protobuf": "^2.11.0", "@grpc/grpc-js": "^1.12.6", "nice-grpc": "^2.1.11", "nice-grpc-common": "^2.0.2" } }, "sha512-cqSq/ew48P3S+4xXpQmS/mDgpa+ijlKYKkQ4MExsQEjHfrJ0DpPJGuY5VHgzfTqV9wYVGyA3TNkDfse/ZRDxoA=="],
 
     "@photon-ai/imessage-kit": ["@photon-ai/imessage-kit@3.0.0", "", { "dependencies": { "@parseaple/typedstream": "^2.0.0" }, "optionalDependencies": { "better-sqlite3": "^12.5.0" } }, "sha512-GGDETlRbrPXP5eaRvswaead7MCBGQkm8f7d3aVbx8+rXhB4GEyPiw7Q1/yz5ix53rmxqKRevWywOfG7n+kZDBw=="],
 
@@ -993,17 +993,17 @@
 
     "@smithy/uuid": ["@smithy/uuid@1.1.2", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-O/IEdcCUKkubz60tFbGA7ceITTAJsty+lBjNoorP4Z6XRqaFb/OjQjZODophEcuq68nKm6/0r+6/lLQ+XVpk8g=="],
 
-    "@spectrum-ts/core": ["@spectrum-ts/core@5.2.0", "", { "dependencies": { "@photon-ai/otel": "^1.0.0", "@photon-ai/proto": "^0.2.4", "@repeaterjs/repeater": "^3.0.6", "marked": "^18.0.5", "mime-types": "^3.0.1", "open-graph-scraper": "^6.11.0", "vcf": "^2.1.2", "zod": "^4.2.1" }, "peerDependencies": { "elysia": "^1", "express": "^4 || ^5", "ffmpeg-static": "^5", "hono": "^4", "typescript": "^5 || ^6.0.0" }, "optionalPeers": ["elysia", "express", "ffmpeg-static", "hono"] }, "sha512-aQSWZ75B9eEiJ00Wa72T/GEEPX9RVIlOPXnsdp0lWWgT5K9+twnL25Kob7L1pgQPbzrgoLH/rjQf3iVktriEwg=="],
+    "@spectrum-ts/core": ["@spectrum-ts/core@6.1.1", "", { "dependencies": { "@photon-ai/otel": "^1.0.0", "@photon-ai/proto": "^0.2.4", "@repeaterjs/repeater": "^3.0.6", "marked": "^18.0.5", "mime-types": "^3.0.1", "open-graph-scraper": "^6.11.0", "vcf": "^2.1.2", "zod": "^4.2.1" }, "peerDependencies": { "elysia": "^1", "express": "^4 || ^5", "ffmpeg-static": "^5", "hono": "^4", "typescript": "^5 || ^6.0.0" }, "optionalPeers": ["elysia", "express", "ffmpeg-static", "hono"] }, "sha512-jAS0g90tBsYLMi1UHI5HLZahKU825Pkr7SodQRO7Bkj5Ps80ApEPyzNQfY41xPxoWkDzoqwQDlppJazU2gVFWA=="],
 
-    "@spectrum-ts/imessage": ["@spectrum-ts/imessage@5.2.0", "", { "dependencies": { "@photon-ai/advanced-imessage": "^0.11.0", "@photon-ai/imessage-kit": "^3.0.0", "@photon-ai/otel": "^1.0.0", "lru-cache": "^11.0.0", "marked": "^18.0.5", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^5.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-AZztks7jex8J3dnK7xUdjcN87xsXcZK+LCDlhC/gwZ4defH4mxPVcxFKUVND/CO7W3tN4pBD0LDfKUO7jx9uaA=="],
+    "@spectrum-ts/imessage": ["@spectrum-ts/imessage@6.1.1", "", { "dependencies": { "@photon-ai/advanced-imessage": "^0.12.0", "@photon-ai/imessage-kit": "^3.0.0", "@photon-ai/otel": "^1.0.0", "lru-cache": "^11.0.0", "marked": "^18.0.5", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^6.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-AdkPrgeyYTuUuX2I+LUVExhhoAUl1Hu5RiKoXsU80ztisqhFHh8b/5PBT4GuiU7omU7JNwP5YZpEyfW0ZLpNHA=="],
 
-    "@spectrum-ts/slack": ["@spectrum-ts/slack@5.2.0", "", { "dependencies": { "@photon-ai/slack": "^0.2.0", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^5.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-ql6pHuEOxq7xAd9iIfVV9xXqpdmy5T8kUK+87HE8R87YFJm5L6z7df0wE0g0vpgQ6J7FkmTII0XNw/X7//odiw=="],
+    "@spectrum-ts/slack": ["@spectrum-ts/slack@6.1.1", "", { "dependencies": { "@photon-ai/slack": "^0.2.0", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^6.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-9zRqSvSBSHNvCarfMbaRXohpUAajsB0uXsZXTobKp1WYHFgZPdWZGxMA1aGyZQH1hAfcbJLHWSQ188Yl5DGrVg=="],
 
-    "@spectrum-ts/telegram": ["@spectrum-ts/telegram@5.2.0", "", { "dependencies": { "@photon-ai/telegram-ts": "10.0.0", "marked": "^18.0.5", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^5.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-ofG2OKK/63Sxkv3a7MEJWkjtCy3Rs8HLEB2pxHSSlofQmAP7SDkXlBEzfgEr1SeM/mIFvE3gXNpIhb97Nz1Dog=="],
+    "@spectrum-ts/telegram": ["@spectrum-ts/telegram@6.1.1", "", { "dependencies": { "@photon-ai/telegram-ts": "10.0.0", "marked": "^18.0.5", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^6.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-Kapad2YNzdursX05gTf0c/N101ulXJX4AndK39YPfB4sz9zQk16F2wjZ1/yZlekxQ+7lST985OSm7CRomLRFYQ=="],
 
-    "@spectrum-ts/terminal": ["@spectrum-ts/terminal@5.2.0", "", { "dependencies": { "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^5.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-OHSg4HKOgLXhv3mzm0M9eIPiwxdKel9yZglfUWGfUyafibnpCnF2XI069zc9hkDgdvCHynLfxM+TsPXPzdiMbw=="],
+    "@spectrum-ts/terminal": ["@spectrum-ts/terminal@6.1.1", "", { "dependencies": { "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^6.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-02Zf0Oslv4mPSAD9Jb9WZTSDBXJlu7spIT0OxgptqhJ5qoGFsBcZ8M3WYu5l+YWpjnGJOd1upJhTFsQZRjCbyw=="],
 
-    "@spectrum-ts/whatsapp-business": ["@spectrum-ts/whatsapp-business@5.2.0", "", { "dependencies": { "@photon-ai/whatsapp-business": "^0.1.1", "mime-types": "^3.0.1", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^5.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-JZJwzug6UviSe7FqWb8y9f1Frq3RJ9IOQ/TgCYhijm5uchXtym/HdC+FAmCG06njcFx+ea7boUhwFs8579V4Bg=="],
+    "@spectrum-ts/whatsapp-business": ["@spectrum-ts/whatsapp-business@6.1.1", "", { "dependencies": { "@photon-ai/whatsapp-business": "^0.1.1", "mime-types": "^3.0.1", "zod": "^4.2.1" }, "peerDependencies": { "@spectrum-ts/core": "^6.0.0", "typescript": "^5 || ^6.0.0" } }, "sha512-aLLVRbRmnylsdhsgMnwx04DpTTWhkhH745bJiE3tzzkN50P96HI/WzvP0kLzkp/dsw6Lct7M7YWrLbExa7yqpg=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
@@ -2377,7 +2377,7 @@
 
     "sparse-bitfield": ["sparse-bitfield@3.0.3", "", { "dependencies": { "memory-pager": "^1.0.2" } }, "sha512-kvzhi7vqKTfkh0PZU+2D2PIllw2ymqJKujUcyPMd9Y75Nv4nPbGJZXNhxsgdQab2BmlDct1YnfQCguEvHr7VsQ=="],
 
-    "spectrum-ts": ["spectrum-ts@5.2.0", "", { "dependencies": { "@spectrum-ts/core": "5.2.0", "@spectrum-ts/imessage": "5.2.0", "@spectrum-ts/slack": "5.2.0", "@spectrum-ts/telegram": "5.2.0", "@spectrum-ts/terminal": "5.2.0", "@spectrum-ts/whatsapp-business": "5.2.0" } }, "sha512-CfHz7ZhKP9Cmunb3i7m4r5stXOGl1HNKOkBp/Fkl1DwDmhnGl+PRDy97FC5JBY+XYxAKxKnMRSbVTl8ldczTNg=="],
+    "spectrum-ts": ["spectrum-ts@6.1.1", "", { "dependencies": { "@spectrum-ts/core": "6.1.1", "@spectrum-ts/imessage": "6.1.1", "@spectrum-ts/slack": "6.1.1", "@spectrum-ts/telegram": "6.1.1", "@spectrum-ts/terminal": "6.1.1", "@spectrum-ts/whatsapp-business": "6.1.1" } }, "sha512-LlbT2jU20IJdsCPnuhWUxaDbYsHm/JKA8U8e4HZX/tIxSQ76nICMrniLvYGejhmTBtO6EhymiXN763ohMjf1GA=="],
 
     "split2": ["split2@4.2.0", "", {}, "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg=="],
 

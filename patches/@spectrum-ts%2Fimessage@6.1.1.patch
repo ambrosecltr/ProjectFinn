@@ -1,8 +1,8 @@
 diff --git a/dist/index.js b/dist/index.js
-index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c7f2acd64 100644
+index 11f79f7..7346bb6 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -463,6 +463,23 @@ const ATTACHMENT_JOIN_RETRY_DELAY_MS = 250;
+@@ -492,6 +492,23 @@ const ATTACHMENT_JOIN_RETRY_DELAY_MS = 250;
  const ATTACHMENT_JOIN_RETRY_LIMIT = 8;
  const ATTACHMENT_JOIN_FETCH_LIMIT = 10;
  const hasAttachmentPlaceholder = (message) => message.text?.includes(ATTACHMENT_PLACEHOLDER) ?? false;
@@ -26,7 +26,7 @@ index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c
  const isPendingAttachmentJoin = (message) => message.attachments.length === 0 && (message.hasAttachments || hasAttachmentPlaceholder(message));
  const refetchUntilAttachmentsSettle = async (client, message) => {
  	if (!message.chatId) return message;
-@@ -500,11 +517,21 @@ const toMessages = async (message) => {
+@@ -529,11 +546,21 @@ const toMessages = async (message) => {
  		},
  		timestamp: message.createdAt
  	};
@@ -53,7 +53,7 @@ index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c
  	return [{
  		...base,
  		id: message.id,
-@@ -770,8 +797,13 @@ const getRemoteAttachment = async (client, guid) => {
+@@ -799,8 +826,13 @@ const getRemoteAttachment = async (client, guid) => {
  //#region src/remote/inbound.ts
  const log$2 = createLogger("spectrum.imessage.inbound");
  const URL_BALLOON_BUNDLE_ID = "com.apple.messages.URLBalloonProvider";
@@ -67,7 +67,7 @@ index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c
  const resolveChatGuid = (message, hint) => {
  	if (hint) return hint;
  	return message.chatGuids?.[0] ?? "";
-@@ -797,6 +829,13 @@ const asProviderGroup = (items) => groupSchema.parse({
+@@ -826,6 +858,13 @@ const asProviderGroup = (items) => groupSchema.parse({
  	type: "group",
  	items
  });
@@ -81,7 +81,7 @@ index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c
  const buildMessageBase = (message, chatGuidHint, timestamp, phone) => {
  	const chat = resolveChatGuid(message, chatGuidHint);
  	return {
-@@ -832,14 +871,33 @@ const toVCardContent = async (client, info) => {
+@@ -861,14 +900,33 @@ const toVCardContent = async (client, info) => {
  const attachmentContent = async (client, info) => isVCardAttachment(info.mimeType, info.fileName) ? await toVCardContent(client, info) : toAttachmentContent(client, info);
  const buildAttachmentMessage = async (client, base, info, id, partIndex, parentId) => {
  	const content = await attachmentContent(client, info);
@@ -119,7 +119,7 @@ index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c
  };
  const toRichlinkMessage = (message, base, id) => {
  	const url = message.content.text ?? "";
-@@ -865,24 +923,7 @@ const rebuildFromAppleMessage = async (client, message, phone, chatGuidHint) =>
+@@ -894,24 +952,7 @@ const rebuildFromAppleMessage = async (client, message, phone, chatGuidHint) =>
  	const messageGuidStr = message.guid;
  	const base = buildMessageBase(message, chatGuidHint, message.dateCreated ?? /* @__PURE__ */ new Date(), phone);
  	const attachments = messageAttachments(message);
@@ -145,7 +145,7 @@ index 0e6b7ba2b72bf902df4d5f97a457c73fd7c3ada7..bc907ead4814d50a41879f920411169c
  	if (getBalloonBundleId(message) === URL_BALLOON_BUNDLE_ID) return toRichlinkMessage(message, base, messageGuidStr);
  	const text = message.content.text;
  	return {
-@@ -906,28 +947,11 @@ const toInboundMessages = async (client, cache, event, phone) => {
+@@ -935,28 +976,11 @@ const toInboundMessages = async (client, cache, event, phone) => {
  		return [msg];
  	}
  	const attachments = messageAttachments(event.message);

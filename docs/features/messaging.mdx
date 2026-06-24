@@ -29,7 +29,7 @@ There are four main messaging components:
 
 ## Spectrum SDK Patch
 
-Finn carries a Bun patch for `@spectrum-ts/imessage@5.2.0` at `patches/@spectrum-ts%2Fimessage@5.2.0.patch`.
+Finn carries a Bun patch for `@spectrum-ts/imessage@6.1.1` at `patches/@spectrum-ts%2Fimessage@6.1.1.patch`.
 
 The patch exists because Spectrum's iMessage provider can drop text when inbound iMessages contain attachments. Without it, text+photo sends can arrive in Finn as an image-only turn, losing the user's caption. The patch strips Apple's attachment placeholder characters and models caption + attachment payloads as Spectrum `group` content so `MessageRouter` can route the caption and media as one user turn.
 
